@@ -47,6 +47,23 @@ export default {
           DEFAULT: "hsl(var(--card))",
           foreground: "hsl(var(--card-foreground))",
         },
+        risk: {
+          safe: "hsl(var(--risk-safe))",
+          "safe-foreground": "hsl(var(--risk-safe-foreground))",
+          moderate: "hsl(var(--risk-moderate))",
+          "moderate-foreground": "hsl(var(--risk-moderate-foreground))",
+          high: "hsl(var(--risk-high))",
+          "high-foreground": "hsl(var(--risk-high-foreground))",
+          critical: "hsl(var(--risk-critical))",
+          "critical-foreground": "hsl(var(--risk-critical-foreground))",
+        },
+        chart: {
+          1: "hsl(var(--chart-1))",
+          2: "hsl(var(--chart-2))",
+          3: "hsl(var(--chart-3))",
+          4: "hsl(var(--chart-4))",
+          5: "hsl(var(--chart-5))",
+        },
         sidebar: {
           DEFAULT: "hsl(var(--sidebar-background))",
           foreground: "hsl(var(--sidebar-foreground))",
@@ -80,11 +97,30 @@ export default {
             height: "0",
           },
         },
+        "fade-in": {
+          "0%": { opacity: "0", transform: "translateY(10px)" },
+          "100%": { opacity: "1", transform: "translateY(0)" }
+        },
+        "pulse-subtle": {
+          "0%, 100%": { opacity: "1" },
+          "50%": { opacity: "0.8" }
+        }
       },
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
         "accordion-up": "accordion-up 0.2s ease-out",
+        "fade-in": "fade-in 0.3s ease-out",
+        "pulse-subtle": "pulse-subtle 2s ease-in-out infinite"
       },
+      backgroundImage: {
+        "gradient-primary": "var(--gradient-primary)",
+        "gradient-safe": "var(--gradient-safe)",
+        "gradient-warning": "var(--gradient-warning)"
+      },
+      boxShadow: {
+        "elegant": "var(--shadow-elegant)",
+        "card": "var(--shadow-card)"
+      }
     },
   },
   plugins: [require("tailwindcss-animate")],
