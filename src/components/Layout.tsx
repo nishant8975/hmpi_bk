@@ -8,9 +8,14 @@ import {
   FileText, 
   HelpCircle,
   Settings,
-  UserCheck
+  UserCheck,
+  AlertTriangle,
+  Moon,
+  Sun,
+  Users // 👈 New icon for Collaboration
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useTheme } from "next-themes";
 
 interface LayoutProps {
   children: ReactNode;
@@ -18,6 +23,7 @@ interface LayoutProps {
 
 const Navigation = () => {
   const location = useLocation();
+  const { theme, setTheme } = useTheme();
   const isActive = (path: string) => location.pathname === path;
 
   const navItems = [
@@ -25,6 +31,8 @@ const Navigation = () => {
     { path: "/upload", label: "Upload Data", icon: Upload },
     { path: "/results", label: "Results", icon: FlaskConical },
     { path: "/reports", label: "Reports", icon: FileText },
+    { path: "/alerts", label: "Alerts", icon: AlertTriangle },
+    { path: "/collaboration", label: "Collaboration", icon: Users }, // 👈 Added here
     { path: "/help", label: "Help", icon: HelpCircle },
   ];
 
@@ -63,14 +71,29 @@ const Navigation = () => {
             ))}
           </nav>
 
-          {/* Admin Access */}
+          {/* Right side: Dark Mode + Admin */}
           <div className="flex items-center space-x-2">
+            {/* 🌙 Dark Mode Toggle */}
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setTheme(theme === "light" ? "dark" : "light")}
+            >
+              {theme === "light" ? (
+                <Moon className="w-4 h-4" />
+              ) : (
+                <Sun className="w-4 h-4" />
+              )}
+            </Button>
+
+            {/* ⚙️ Admin Access */}
             <Button variant="outline" size="sm" asChild>
               <Link to="/admin" className="flex items-center space-x-1">
                 <Settings className="w-4 h-4" />
                 <span className="hidden sm:inline">Admin</span>
               </Link>
             </Button>
+
             <Button variant="ghost" size="sm">
               <UserCheck className="w-4 h-4" />
             </Button>
@@ -85,9 +108,7 @@ export const Layout = ({ children }: LayoutProps) => {
   return (
     <div className="min-h-screen bg-background">
       <Navigation />
-      <main className="container mx-auto px-6 py-8">
-        {children}
-      </main>
+      <main className="container mx-auto px-6 py-8">{children}</main>
     </div>
   );
 };
