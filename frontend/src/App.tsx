@@ -1,27 +1,28 @@
-import { Toaster } from "./components/ui/toaster";
-import { Toaster as Sonner } from "./components/ui/sonner";
-import { TooltipProvider } from "./components/ui/tooltip";
+import { Toaster } from "@/components/ui/toaster";
+import { Toaster as Sonner } from "@/components/ui/sonner";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Routes, Route, Outlet } from "react-router-dom";
-import { Layout } from "./components/Layout";
+import { Layout } from "@/components/Layout";
 import { ThemeProvider } from "next-themes";
-import ProtectedRoute from './routes/ProtectedRoute';
+import ProtectedRoute from '@/routes/ProtectedRoute';
 
 // Pages
-import Dashboard from "./pages/Dashboard";
-import Upload from "./pages/Upload";
-import Results from "./pages/Results";
-import Reports from "./pages/Reports";
-import Help from "./pages/Help";
-import AdminDashboard from "./pages/AdminDashboard";
-import NotFound from "./pages/NotFound";
-import Alerts from "./pages/Alerts";
-import Collaboration from "./pages/Collaboration";
-import Login from "./pages/Login";
-import ProfilePage from "./components/auth/ProfilePage";
-import AnalysisHistory from "./pages/AnalysisHistory";
+import Dashboard from "@/pages/Dashboard";
+import Upload from "@/pages/Upload";
+import Results from "@/pages/Results";
+import Reports from "@/pages/Reports";
+import Help from "@/pages/Help";
+import AdminDashboard from "@/pages/AdminDashboard";
+import NotFound from "@/pages/NotFound";
+import Alerts from "@/pages/Alerts";
+import Collaboration from "@/pages/Collaboration";
+import Login from "@/pages/Login";
+import ProfilePage from "@/components/auth/ProfilePage"; 
+import AnalysisHistory from "@/pages/AnalysisHistory";
+import SiteDetailsPage from "@/pages/SiteDetailsPage";
 
-import './App.css';
+import '@/App.css';
 
 const queryClient = new QueryClient();
 
@@ -30,7 +31,6 @@ const ProtectedLayout = () => (
     <Outlet />
   </Layout>
 );
-
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
@@ -58,12 +58,13 @@ const App = () => (
                 <Route path="/upload" element={<Upload />} />
                 <Route path="/results" element={<Results />} />
                 <Route path="/analysis-history" element={<AnalysisHistory />} />
+                <Route path="/site/:siteId" element={<SiteDetailsPage />} />
               </Route>
 
               {/* Routes for Policymakers, Researchers & Admins */}
               <Route element={<ProtectedRoute allowedRoles={['policymaker', 'researcher', 'admin']} />}>
                 <Route path="/reports" element={<Reports />} />
-                <Route path="/alerts" element={<Alerts />} />
+                <Route path="/alerts" element={<Alerts />} />  
               </Route>
 
               {/* Routes for Admins ONLY */}

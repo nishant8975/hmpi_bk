@@ -166,6 +166,7 @@ app.get(
         .select(`
           id,
           sample_date,
+          location_id,
           locations ( site ),
           pollution_indices ( hmpi, risk_level )
         `)
@@ -253,7 +254,7 @@ app.get(
   }
 );
 
-// --- ✨ NEW: Route to get all necessary data for the Researcher Dashboard ---
+// --- Route to get all necessary data for the Researcher Dashboard ---
 app.get(
   "/api/dashboard/researcher",
   authMiddleware,
@@ -314,6 +315,49 @@ app.get(
   }
 );
 
+app.get(
+  "/api/sites/:siteId",
+  authMiddleware, 
+  authorize(['researcher', 'policymaker', 'admin']),
+  async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const { siteId } = req.params;
+
+      // 1. Fetch the basic site information
+      const { data: siteData, error: siteError } = await supabaseAdmin
+        .from('locations')
+        .select('id, site, latitude, longitude')
+        .eq('id', siteId)
+        .single();
+
+      if (siteError) throw siteError;
+      if (!siteData) return res.status(404).json({ error: "Site not found." });
+
+      // 2. Fetch all historical samples for this site, now including all metal concentrations
+      const { data: historicalData, error: historyError } = await supabaseAdmin
+        .from('water_samples')
+        .select(`
+          id,
+          sample_date,
+          "As", "Cd", "Cr", "Cu", "Fe", "Mn", "Ni", "Pb", "Zn",
+          pollution_indices ( hmpi, risk_level, key_contaminants )
+        `)
+        .eq('location_id', siteId)
+        .order('sample_date', { ascending: true });
+
+      if (historyError) throw historyError;
+
+      res.json({
+        ...siteData,
+        history: historicalData,
+      });
+
+    } catch (err: any) {
+      console.error(`🔥 Error fetching site details for ID ${req.params.siteId}:`, err);
+      res.status(500).json({ error: "Failed to fetch site details." });
+    }
+  }
+);
 
 // ---------------- 404 Handler ----------------
 app.use((req: Request, res: Response) => {

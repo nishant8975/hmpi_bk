@@ -1,8 +1,8 @@
 import { useState, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query'; // ✨ 1. Import useQuery
-import { getAnalysisHistory } from '../service/api'; // Corrected import path
-import { useToast } from '../components/ui/use-toast'; // Corrected import path
+import { useNavigate, Link } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
+import { getAnalysisHistory } from '../service/api'; 
+import { useToast } from '../components/ui/use-toast';
 import {
   Table,
   TableBody,
@@ -25,9 +25,11 @@ import { Input } from '@/components/ui/input';
 import { AlertCircle, Loader2, MoreHorizontal, Search } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 
+// --- Types ---
 type Analysis = {
   id: number;
   sample_date: string;
+  location_id: number; 
   locations: {
     site: string;
   };
@@ -37,7 +39,10 @@ type Analysis = {
   }[];
 };
 
-const getRiskBadgeVariant = (riskLevel?: string): "default" | "secondary" | "destructive" | "outline" => {
+// --- Badge variant mapping ---
+const getRiskBadgeVariant = (
+  riskLevel?: string
+): "default" | "secondary" | "destructive" | "outline" => {
   switch (riskLevel?.toLowerCase()) {
     case 'safe': return 'default';
     case 'moderate': return 'secondary';
@@ -52,34 +57,33 @@ const AnalysisHistory = () => {
   const { toast } = useToast();
   const navigate = useNavigate();
 
-  // ✨ 2. Replace useEffect and useState with useQuery for data fetching and caching
-  const { 
-    data: analyses = [], // Provide a default empty array
-    isLoading, 
-    error 
+  const {
+    data: analyses = [],
+    isLoading,
+    error,
   } = useQuery<Analysis[], Error>({
-    queryKey: ['analysisHistory'], // A unique key for this query
-    queryFn: getAnalysisHistory,   // The function that fetches the data
-    staleTime: 1000 * 60 * 5,      // Cache data for 5 minutes before re-fetching
+    queryKey: ['analysisHistory'],
+    queryFn: getAnalysisHistory,
+    staleTime: 1000 * 60 * 5, // Cache data for 5 minutes
   });
 
   const filteredAnalyses = useMemo(() => {
-    return analyses.filter(analysis => 
+    if (!analyses) return [];
+    return analyses.filter((analysis) =>
       analysis.locations.site.toLowerCase().includes(searchTerm.toLowerCase())
     );
   }, [analyses, searchTerm]);
-
+  
   const handleIssueAlert = (analysis: Analysis) => {
     const riskLevel = analysis.pollution_indices[0]?.risk_level;
     const isHighRisk = riskLevel === 'high' || riskLevel === 'critical';
-
     navigate('/alerts', {
       state: {
         sampleId: analysis.id,
         title: `Pollution Alert for ${analysis.locations.site}`,
         riskLevel: riskLevel,
         isUrgent: isHighRisk,
-      }
+      },
     });
   };
 
@@ -133,43 +137,62 @@ const AnalysisHistory = () => {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {filteredAnalyses.length > 0 ? filteredAnalyses.map((analysis) => (
-              <TableRow key={analysis.id}>
-                <TableCell className="font-medium">{analysis.locations.site}</TableCell>
-                <TableCell>{new Date(analysis.sample_date).toLocaleDateString()}</TableCell>
-                <TableCell className="text-right">{analysis.pollution_indices[0]?.hmpi.toFixed(2)}</TableCell>
-                <TableCell className="text-center">
-                   <Badge variant={getRiskBadgeVariant(analysis.pollution_indices[0]?.risk_level)}>
+            {filteredAnalyses.length > 0 ? (
+              filteredAnalyses.map((analysis) => (
+                <TableRow key={analysis.id}>
+                  <TableCell className="font-medium">
+                    <Link to={`/site/${analysis.location_id}`} className="hover:underline text-primary">
+                      {analysis.locations.site}
+                    </Link>
+                  </TableCell>
+                  <TableCell>
+                    {new Date(analysis.sample_date).toLocaleDateString()}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    {analysis.pollution_indices[0]?.hmpi.toFixed(2)}
+                  </TableCell>
+                  <TableCell className="text-center">
+                    <Badge
+                      variant={getRiskBadgeVariant(
+                        analysis.pollution_indices[0]?.risk_level
+                      )}
+                    >
                       {analysis.pollution_indices[0]?.risk_level}
-                   </Badge>
-                </TableCell>
-                <TableCell className="text-right">
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" className="h-8 w-8 p-0">
-                        <span className="sr-only">Open menu</span>
-                        <MoreHorizontal className="h-4 w-4" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                      <DropdownMenuItem onClick={() => navigate(`/results/${analysis.id}`)}>
-                        View Details
-                      </DropdownMenuItem>
-                      <DropdownMenuItem disabled>Generate Report</DropdownMenuItem>
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem onClick={() => handleIssueAlert(analysis)} className="text-destructive focus:text-destructive">
-                        <AlertCircle className="mr-2 h-4 w-4" />
-                        <span>Issue Alert</span>
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </TableCell>
-              </TableRow>
-            )) : (
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" className="h-8 w-8 p-0">
+                          <span className="sr-only">Open menu</span>
+                          <MoreHorizontal className="h-4 w-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                        <DropdownMenuItem onClick={() => navigate(`/site/${analysis.location_id}`)}>
+                          View Site Details
+                        </DropdownMenuItem>
+                        <DropdownMenuItem disabled>Generate Report</DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem
+                          onClick={() => handleIssueAlert(analysis)}
+                          className="text-destructive focus:text-destructive"
+                        >
+                          <AlertCircle className="mr-2 h-4 w-4" />
+                          <span>Issue Alert</span>
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </TableCell>
+                </TableRow>
+              ))
+            ) : (
               <TableRow>
                 <TableCell colSpan={5} className="h-24 text-center text-muted-foreground">
-                  {analyses.length === 0 ? "You have not uploaded any analyses yet." : "No results found for your search."}
+                  {analyses.length === 0
+                    ? "You have not uploaded any analyses yet."
+                    : "No results found for your search."}
                 </TableCell>
               </TableRow>
             )}

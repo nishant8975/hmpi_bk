@@ -172,3 +172,17 @@ export const getResearcherDashboardData = async () => {
   return response.json();
 };
 
+
+// --- ✨ NEW: Function to get all data for a single site by its ID ---
+export const getSiteDetails = async (siteId: string): Promise<any> => {
+  const authHeader = await getAuthHeader();
+  const response = await fetch(`${API_BASE}/api/sites/${siteId}`, {
+    headers: { ...authHeader },
+  });
+  if (!response.ok) {
+    const errorData = await response.json();
+    throw new Error(errorData.error || `Failed to fetch details for site ${siteId}.`);
+  }
+  return response.json();
+};
+
