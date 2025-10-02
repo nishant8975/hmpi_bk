@@ -1,4 +1,7 @@
 import { useState, useCallback } from "react";
+import { supabase } from "@/config/supabaseClient"; // For authentication
+import { useToast } from "@/components/ui/use-toast"; // For notifications
+
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
@@ -12,7 +15,8 @@ import {
   Download
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import { uploadFile, downloadResults } from "../service/api";
+// We are removing the api service import to handle fetch directly here for auth
+// import { uploadFile, downloadResults } from "../service/api";
 
 const Upload = () => {
   const [dragActive, setDragActive] = useState(false);
@@ -23,8 +27,9 @@ const Upload = () => {
   const [results, setResults] = useState<any[]>([]);
   const [file, setFile] = useState<File | null>(null);
   const navigate = useNavigate();
+  const { toast } = useToast();
 
-  // drag handling
+  // drag handling - no changes needed
   const handleDrag = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
@@ -44,30 +49,56 @@ const Upload = () => {
     }
   }, []);
 
-  // upload handler
+  // upload handler - UPDATED WITH AUTHENTICATION LOGIC
   const handleFiles = async (files: FileList) => {
     const f = files[0];
     if (!f) return;
     setFile(f);
 
-    try {
-      setIsUploading(true);
-      setError(null);
-      setUploadProgress(0);
+    setIsUploading(true);
+    setError(null);
+    setUploadComplete(false);
+    setUploadProgress(0);
 
-      // fake progress animation
+    try {
+      // 1. Get the user's session token from Supabase
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError || !session) {
+        throw new Error("Authentication error: Could not get user session.");
+      }
+
+      // Start a fake progress animation for better UX
       const interval = setInterval(() => {
         setUploadProgress((prev) => (prev < 90 ? prev + 10 : prev));
       }, 300);
 
-      const data = await uploadFile(f);
-      clearInterval(interval);
+      // 2. Prepare the file for upload
+      const formData = new FormData();
+      formData.append("file", f);
+
+      // 3. Perform the authenticated fetch request to the backend
+      const response = await fetch("http://localhost:5000/upload", {
+        method: "POST",
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+        },
+        body: formData,
+      });
+
+      clearInterval(interval); // Stop the fake progress
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Upload failed from server.");
+      }
 
       setResults(data);
       setUploadProgress(100);
       setUploadComplete(true);
+      toast({ title: "Upload Successful", description: "Your file has been processed." });
     } catch (err: any) {
       setError(err.message);
+      toast({ variant: "destructive", title: "Upload Failed", description: err.message });
     } finally {
       setIsUploading(false);
     }
@@ -78,7 +109,9 @@ const Upload = () => {
   };
 
   const handleDownload = (format: "csv" | "excel") => {
-    if (file) downloadResults(file, format);
+    // TODO: Implement download logic, potentially using the file state
+    console.log(`Download results as ${format}`);
+    toast({ title: "Download initiated." });
   };
 
   return (
@@ -163,7 +196,7 @@ const Upload = () => {
               </div>
             ) : (
               <div className="text-center p-8">
-                <CheckCircle className="w-12 h-12 mx-auto mb-4 text-risk-safe" />
+                <CheckCircle className="w-12 h-12 mx-auto mb-4 text-green-500" />
                 <p className="text-lg font-medium text-foreground mb-2">
                   Upload Complete!
                 </p>
@@ -171,7 +204,7 @@ const Upload = () => {
                   Your dataset has been successfully uploaded and validated
                 </p>
                 <div className="flex gap-4 justify-center">
-                  <Button onClick={proceedToAnalysis} className="shadow-elegant">
+                  <Button onClick={proceedToAnalysis}>
                     Proceed to Analysis
                   </Button>
                   <Button variant="outline" onClick={() => handleDownload("csv")}>
@@ -214,21 +247,21 @@ const Upload = () => {
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="flex items-start gap-2">
-                <CheckCircle className="w-4 h-4 text-risk-safe mt-0.5" />
+                <CheckCircle className="w-4 h-4 text-green-500 mt-0.5" />
                 <div>
                   <p className="text-sm font-medium text-foreground">Location Data</p>
                   <p className="text-xs text-muted-foreground">Site names with GPS coordinates</p>
                 </div>
               </div>
               <div className="flex items-start gap-2">
-                <CheckCircle className="w-4 h-4 text-risk-safe mt-0.5" />
+                <CheckCircle className="w-4 h-4 text-green-500 mt-0.5" />
                 <div>
                   <p className="text-sm font-medium text-foreground">Heavy Metals</p>
                   <p className="text-xs text-muted-foreground">As, Cd, Cr, Cu, Fe, Mn, Ni, Pb, Zn concentrations</p>
                 </div>
               </div>
               <div className="flex items-start gap-2">
-                <CheckCircle className="w-4 h-4 text-risk-safe mt-0.5" />
+                <CheckCircle className="w-4 h-4 text-green-500 mt-0.5" />
                 <div>
                   <p className="text-sm font-medium text-foreground">Units & Standards</p>
                   <p className="text-xs text-muted-foreground">Consistent measurement units (mg/L or μg/L)</p>
@@ -258,10 +291,16 @@ const Upload = () => {
 
       {/* Error */}
       {error && (
-        <p className="text-red-500 font-medium text-center">{error}</p>
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>
+            {error}
+          </AlertDescription>
+        </Alert>
       )}
     </div>
   );
 };
 
 export default Upload;
+

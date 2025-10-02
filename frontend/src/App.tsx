@@ -1,11 +1,11 @@
-// App.tsx
-import { Toaster } from "@/components/ui/toaster";
-import { Toaster as Sonner } from "@/components/ui/sonner";
-import { TooltipProvider } from "@/components/ui/tooltip";
+import { Toaster } from "./components/ui/toaster";
+import { Toaster as Sonner } from "./components/ui/sonner";
+import { TooltipProvider } from "./components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
-import { Layout } from "@/components/Layout";
+import { Routes, Route, Outlet } from "react-router-dom";
+import { Layout } from "./components/Layout";
 import { ThemeProvider } from "next-themes";
+import ProtectedRoute from './routes/ProtectedRoute';
 
 // Pages
 import Dashboard from "./pages/Dashboard";
@@ -17,8 +17,20 @@ import AdminDashboard from "./pages/AdminDashboard";
 import NotFound from "./pages/NotFound";
 import Alerts from "./pages/Alerts";
 import Collaboration from "./pages/Collaboration";
+import Login from "./pages/Login";
+import ProfilePage from "./components/auth/ProfilePage";
+import AnalysisHistory from "./pages/AnalysisHistory";
+
+import './App.css';
 
 const queryClient = new QueryClient();
+
+const ProtectedLayout = () => (
+  <Layout>
+    <Outlet />
+  </Layout>
+);
+
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
@@ -26,25 +38,48 @@ const App = () => (
       <TooltipProvider>
         <Toaster />
         <Sonner />
-        <BrowserRouter>
-          <Layout>
-            <Routes>
+        <Routes>
+          {/* --- Public Routes (No Layout) --- */}
+          <Route path="/login" element={<Login />} />
+          <Route path="/help" element={<Help />} />
+
+          {/* --- Protected Routes (All use the main Layout) --- */}
+          <Route element={<ProtectedRoute />}>
+            <Route element={<ProtectedLayout />}>
+              {/* Routes for ANY logged-in user */}
               <Route path="/" element={<Dashboard />} />
-              <Route path="/upload" element={<Upload />} />
-              <Route path="/results" element={<Results />} />
-              <Route path="/reports" element={<Reports />} />
-              <Route path="/help" element={<Help />} />
-              <Route path="/alerts" element={<Alerts />} />
               <Route path="/collaboration" element={<Collaboration />} />
-              <Route path="/admin" element={<AdminDashboard />} />
-              {/* Catch-all route must stay at bottom */}
-              <Route path="*" element={<NotFound />} />
-            </Routes>
-          </Layout>
-        </BrowserRouter>
+              <Route path="/profile" element={<ProfilePage />} />
+
+              {/* NESTED role-specific routes */}
+              
+              {/* Routes for Researchers & Admins */}
+              <Route element={<ProtectedRoute allowedRoles={['researcher', 'admin']} />}>
+                <Route path="/upload" element={<Upload />} />
+                <Route path="/results" element={<Results />} />
+                <Route path="/analysis-history" element={<AnalysisHistory />} />
+              </Route>
+
+              {/* Routes for Policymakers, Researchers & Admins */}
+              <Route element={<ProtectedRoute allowedRoles={['policymaker', 'researcher', 'admin']} />}>
+                <Route path="/reports" element={<Reports />} />
+                <Route path="/alerts" element={<Alerts />} />
+              </Route>
+
+              {/* Routes for Admins ONLY */}
+              <Route element={<ProtectedRoute allowedRoles={['admin']} />}>
+                <Route path="/admin" element={<AdminDashboard />} />
+              </Route>
+            </Route>
+          </Route>
+
+          {/* --- Catch-all route must stay at the very bottom --- */}
+          <Route path="*" element={<NotFound />} />
+        </Routes>
       </TooltipProvider>
     </ThemeProvider>
   </QueryClientProvider>
 );
 
 export default App;
+

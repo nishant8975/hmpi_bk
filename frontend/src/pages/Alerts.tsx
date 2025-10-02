@@ -1,150 +1,180 @@
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
+import { useAuth } from "../hooks/useAuth";
+import { useToast } from "../components/ui/use-toast";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { createAlert, getAlerts } from "../service/api";
+
 import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { toast } from "sonner";
-import { Download, Send } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { AlertCircle, Loader2, Send, FileDown, MoreHorizontal } from "lucide-react";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 
-const alerts = [
-  {
-    site: "Site A-01",
-    region: "Mumbai Basin",
-    risk: "High",
-    govtBody: "Central Pollution Control Board",
-    status: "Sent",
-    date: "2025-09-14",
-    resolved: false,
-    immediate: false,
-    contaminants: ["As", "Cd", "Pb"],
-    reportFile: "/reports/SiteA-01.pdf",
-  },
-  {
-    site: "Site C-12",
-    region: "Godavari Basin",
-    risk: "Moderate",
-    govtBody: "State Pollution Control Board",
-    status: "Pending",
-    date: "2025-09-13",
-    resolved: false,
-    immediate: false,
-    contaminants: ["Cr"],
-    reportFile: "/reports/SiteC-12.pdf",
-  },
-  {
-    site: "Site D-08",
-    region: "Narmada Basin",
-    risk: "Critical",
-    govtBody: "Ministry of Environment, Forest and Climate Change",
-    status: "In Process",
-    date: "2025-09-12",
-    resolved: false,
-    immediate: true,
-    contaminants: ["As", "Cd", "Cr", "Pb"],
-    reportFile: "/reports/SiteD-08.pdf",
-  },
-  {
-    site: "Site E-15",
-    region: "Tapti Basin",
-    risk: "Safe",
-    govtBody: "State Pollution Control Board",
-    status: "Predicted Risk",
-    date: "2025-09-11",
-    resolved: true,
-    immediate: false,
-    contaminants: [],
-    reportFile: "/reports/SiteE-15.pdf",
-  },
-];
-
-const getRiskColor = (risk: string) => {
-  switch (risk) {
-    case "Critical": return "text-red-600";
-    case "High": return "text-orange-500";
-    case "Moderate": return "text-yellow-500";
-    default: return "text-green-600";
+const getRiskBadgeVariant = (risk?: string): "default" | "secondary" | "destructive" | "outline" => {
+  switch (risk?.toLowerCase()) {
+    case 'high': return 'outline';
+    case 'critical': return 'destructive';
+    case 'moderate': return 'secondary';
+    default: return 'default';
   }
 };
 
-const Alerts = () => {
-  const sendToGovt = (site: string, body: string) => {
-    toast.success(`Report for ${site} has been sent to ${body}.`);
-  };
+const AlertsPage = () => {
+    const { profile } = useAuth();
+    const { toast } = useToast();
+    const location = useLocation();
+    const navigate = useNavigate();
+    const queryClient = useQueryClient();
 
-  return (
-    <div className="space-y-6 p-6">
-      <Card>
-        <CardHeader>
-          <CardTitle>Environmental Risk Alerts</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <table className="w-full text-left border-collapse">
-            <thead className="border-b bg-muted/30">
-              <tr>
-                <th className="py-3 px-2">Site</th>
-                <th className="py-3 px-2">Region</th>
-                <th className="py-3 px-2">Risk</th>
-                <th className="py-3 px-2">Contaminants</th>
-                <th className="py-3 px-2">Govt Body</th>
-                <th className="py-3 px-2">Date Sent</th>
-                <th className="py-3 px-2">Resolved</th>
-                <th className="py-3 px-2">Immediate</th>
-                <th className="py-3 px-2">Status</th>
-                <th className="py-3 px-2 text-center">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {alerts.map((a) => (
-                <tr key={a.site} className="border-b last:border-none hover:bg-muted/10">
-                  <td className="py-3 px-2 font-medium">{a.site}</td>
-                  <td className="px-2">{a.region}</td>
-                  <td className={cn("px-2 font-semibold", getRiskColor(a.risk))}>{a.risk}</td>
-                  <td className="px-2">
-                    {a.contaminants.length ? (
-                      <div className="flex flex-wrap gap-1">
-                        {a.contaminants.map((c) => (
-                          <Badge key={c} variant="secondary">{c}</Badge>
-                        ))}
-                      </div>
-                    ) : (
-                      <span className="text-muted-foreground">None</span>
-                    )}
-                  </td>
-                  <td className="px-2">{a.govtBody}</td>
-                  <td className="px-2">{a.date}</td>
-                  <td className="px-2">{a.resolved ? "Yes" : "No"}</td>
-                  <td className="px-2">
-                    {a.immediate ? (
-                      <Badge variant="destructive">Urgent</Badge>
-                    ) : (
-                      "-"
-                    )}
-                  </td>
-                  <td className="px-2">{a.status}</td>
-                  <td className="px-2 flex gap-2 justify-center">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => window.open(a.reportFile, "_blank")}
-                    >
-                      <Download className="w-4 h-4 mr-1" />
-                      Report
-                    </Button>
-                    <Button
-                      size="sm"
-                      onClick={() => sendToGovt(a.site, a.govtBody)}
-                    >
-                      <Send className="w-4 h-4 mr-1" />
-                      Send
-                    </Button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </CardContent>
-      </Card>
-    </div>
-  );
+    // Form state, pre-filled from navigation if available
+    const [title, setTitle] = useState(location.state?.title || "");
+    const [message, setMessage] = useState("");
+    const [govtBody, setGovtBody] = useState("State Pollution Control Board");
+    const [isUrgent, setIsUrgent] = useState(location.state?.isUrgent || false);
+    const [status, setStatus] = useState("Pending");
+    const sampleId = location.state?.sampleId;
+
+    // ✨ Use useQuery for efficient data fetching and caching
+    const { data: alerts = [], isLoading, error } = useQuery<any[], Error>({
+        queryKey: ['alerts'],
+        queryFn: getAlerts,
+        staleTime: 1000 * 60, // Cache for 1 minute
+    });
+
+    // ✨ Use useMutation for robust form submissions
+    const alertMutation = useMutation({
+        mutationFn: createAlert,
+        onSuccess: () => {
+            toast({ title: 'Success', description: 'Alert has been sent to policymakers.' });
+            queryClient.invalidateQueries({ queryKey: ['alerts'] }); // Refresh the alerts list
+            navigate('/analysis-history');
+        },
+        onError: (err: Error) => {
+            toast({ variant: 'destructive', title: 'Failed to Send Alert', description: err.message });
+        },
+    });
+
+    const handleSubmitAlert = (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!sampleId) {
+            toast({ variant: 'destructive', title: 'Action Required', description: "Create alerts from the 'Analysis History' page." });
+            return;
+        }
+        alertMutation.mutate({ sample_id: sampleId, title, message, govt_body: govtBody, is_urgent: isUrgent, status });
+    };
+
+    const isResearcher = profile?.role === 'researcher' || profile?.role === 'admin';
+
+    return (
+        <div className="space-y-8">
+            <h1 className="text-3xl font-bold text-foreground">Environmental Risk Alerts</h1>
+
+            {isResearcher && (
+                <Card>
+                    <CardHeader>
+                        <CardTitle>Issue a New Alert</CardTitle>
+                        <CardDescription>Fill out the details below to notify the relevant authorities of a key finding.</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <form onSubmit={handleSubmitAlert} className="space-y-6">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                               <div className="space-y-2">
+                                    <Label htmlFor="title">Alert Title</Label>
+                                    <Input id="title" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g., Critical Lead Levels Detected" required />
+                                </div>
+                                <div className="space-y-2">
+                                    <Label htmlFor="govtBody">Government Body</Label>
+                                    <Select value={govtBody} onValueChange={setGovtBody}>
+                                        <SelectTrigger><SelectValue placeholder="Select a body" /></SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="State Pollution Control Board">State Pollution Control Board</SelectItem>
+                                            <SelectItem value="Central Pollution Control Board">Central Pollution Control Board</SelectItem>
+                                            <SelectItem value="Ministry of Environment">Ministry of Environment</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                            </div>
+                            <div className="space-y-2">
+                                <Label htmlFor="message">Message to Policymakers (Optional)</Label>
+                                <Textarea id="message" value={message} onChange={(e) => setMessage(e.target.value)} placeholder="Provide a summary of the findings and any recommended actions..." />
+                            </div>
+                            <div className="flex items-center space-x-2">
+                                <Switch id="isUrgent" checked={isUrgent} onCheckedChange={setIsUrgent} />
+                                <Label htmlFor="isUrgent">Mark as Urgent</Label>
+                            </div>
+                            <div>
+                                <Button type="submit" disabled={alertMutation.isPending || !sampleId} className="w-full md:w-auto">
+                                    {alertMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}
+                                    Send Alert to Policymakers
+                                </Button>
+                                {!sampleId && <p className="text-xs text-center md:text-left mt-2 text-destructive">To create an alert, please start from your 'Analysis History' page.</p>}
+                            </div>
+                        </form>
+                    </CardContent>
+                </Card>
+            )}
+
+            <Card>
+                <CardHeader>
+                    <CardTitle>Active Alerts Feed</CardTitle>
+                </CardHeader>
+                <CardContent>
+                    {isLoading ? <div className="text-center py-12"><Loader2 className="h-8 w-8 animate-spin mx-auto text-primary" /></div> :
+                     error ? <Alert variant="destructive"><AlertCircle className="h-4 w-4" /><AlertTitle>Error</AlertTitle><AlertDescription>{error.message}</AlertDescription></Alert> :
+                     <Table>
+                        <TableHeader>
+                            <TableRow>
+                                <TableHead>Site</TableHead>
+                                <TableHead>Risk</TableHead>
+                                <TableHead>Contaminants</TableHead>
+                                <TableHead>Govt Body</TableHead>
+                                <TableHead>Date Sent</TableHead>
+                                <TableHead>Status</TableHead>
+                                <TableHead className="text-right">Actions</TableHead>
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                            {alerts.length > 0 ? alerts.map(alert => (
+                                <TableRow key={alert.id}>
+                                    <TableCell className="font-medium">{alert.water_samples?.locations?.site || 'N/A'}</TableCell>
+                                    <TableCell><Badge variant={getRiskBadgeVariant(alert.water_samples?.pollution_indices[0]?.risk_level)}>{alert.water_samples?.pollution_indices[0]?.risk_level || 'N/A'}</Badge></TableCell>
+                                    <TableCell className="text-xs max-w-[200px] truncate">{alert.water_samples?.pollution_indices[0]?.key_contaminants?.join(', ') || 'None'}</TableCell>
+                                    <TableCell>{alert.govt_body}</TableCell>
+                                    <TableCell>{new Date(alert.created_at).toLocaleDateString()}</TableCell>
+                                    <TableCell>
+                                        {alert.is_urgent && <Badge variant="destructive" className="mr-2">Urgent</Badge>}
+                                        <Badge variant="outline">{alert.status}</Badge>
+                                    </TableCell>
+                                    <TableCell className="text-right">
+                                        <DropdownMenu>
+                                            <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8"><MoreHorizontal className="w-4 h-4" /></Button></DropdownMenuTrigger>
+                                            <DropdownMenuContent>
+                                                <DropdownMenuItem>View Details</DropdownMenuItem>
+                                                <DropdownMenuItem><FileDown className="w-4 h-4 mr-2" /> Download Report</DropdownMenuItem>
+                                            </DropdownMenuContent>
+                                        </DropdownMenu>
+                                    </TableCell>
+                                </TableRow>
+                            )) : (
+                                <TableRow>
+                                    <TableCell colSpan={7} className="h-24 text-center text-muted-foreground">No active alerts.</TableCell>
+                                </TableRow>
+                            )}
+                        </TableBody>
+                    </Table>}
+                </CardContent>
+            </Card>
+        </div>
+    );
 };
 
-export default Alerts;
+export default AlertsPage;
+

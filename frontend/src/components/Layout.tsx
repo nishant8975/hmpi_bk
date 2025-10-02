@@ -8,14 +8,17 @@ import {
   FileText, 
   HelpCircle,
   Settings,
-  UserCheck,
   AlertTriangle,
   Moon,
   Sun,
-  Users // 👈 New icon for Collaboration
+  Users,
+  History, // ✨ New Icon
+  FlaskConicalIcon
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useTheme } from "next-themes";
+import { useAuth } from "@/hooks/useAuth";
+import UserProfile from "@/components/auth/userProfile"
 
 interface LayoutProps {
   children: ReactNode;
@@ -24,17 +27,23 @@ interface LayoutProps {
 const Navigation = () => {
   const location = useLocation();
   const { theme, setTheme } = useTheme();
+  const { profile } = useAuth();
   const isActive = (path: string) => location.pathname === path;
 
-  const navItems = [
-    { path: "/", label: "Dashboard", icon: BarChart3 },
-    { path: "/upload", label: "Upload Data", icon: Upload },
-    { path: "/results", label: "Results", icon: FlaskConical },
-    { path: "/reports", label: "Reports", icon: FileText },
-    { path: "/alerts", label: "Alerts", icon: AlertTriangle },
-    { path: "/collaboration", label: "Collaboration", icon: Users }, // 👈 Added here
-    { path: "/help", label: "Help", icon: HelpCircle },
+  // ✨ Updated Navigation items with new roles and pages
+  const allNavItems = [
+    { path: "/", label: "Dashboard", icon: BarChart3, roles: ['researcher', 'policymaker', 'admin'] },
+    { path: "/upload", label: "Upload Data", icon: Upload, roles: ['researcher', 'admin'] },
+    { path: "/results", label: "Results", icon: FlaskConicalIcon, roles: ['researcher', 'admin'] },
+    { path: "/analysis-history", label: "Analysis History", icon: History, roles: ['researcher', 'admin'] },
+    { path: "/reports", label: "Official Reports", icon: FileText, roles: ['policymaker', 'admin'] },
+    // 👇 THE CHANGE IS HERE: 'researcher' has been added to this list
+    { path: "/alerts", label: "Alerts", icon: AlertTriangle, roles: ['policymaker', 'researcher', 'admin'] },
+    { path: "/collaboration", label: "Collaboration", icon: Users, roles: ['researcher', 'policymaker', 'admin'] },
+    { path: "/help", label: "Help", icon: HelpCircle, roles: ['public', 'researcher', 'policymaker', 'admin'] },
   ];
+
+  const navItems = allNavItems.filter(item => profile && item.roles.includes(profile.role));
 
   return (
     <header className="border-b bg-card shadow-card">
@@ -71,32 +80,25 @@ const Navigation = () => {
             ))}
           </nav>
 
-          {/* Right side: Dark Mode + Admin */}
+          {/* Right side: Dark Mode + Admin + User Profile */}
           <div className="flex items-center space-x-2">
-            {/* 🌙 Dark Mode Toggle */}
             <Button
               variant="ghost"
-              size="sm"
+              size="icon"
+              className="h-9 w-9"
               onClick={() => setTheme(theme === "light" ? "dark" : "light")}
             >
-              {theme === "light" ? (
-                <Moon className="w-4 h-4" />
-              ) : (
-                <Sun className="w-4 h-4" />
-              )}
+              {theme === "light" ? <Moon className="w-4 h-4" /> : <Sun className="w-4 h-4" />}
             </Button>
-
-            {/* ⚙️ Admin Access */}
-            <Button variant="outline" size="sm" asChild>
-              <Link to="/admin" className="flex items-center space-x-1">
-                <Settings className="w-4 h-4" />
-                <span className="hidden sm:inline">Admin</span>
-              </Link>
-            </Button>
-
-            <Button variant="ghost" size="sm">
-              <UserCheck className="w-4 h-4" />
-            </Button>
+            {profile?.role === 'admin' && (
+              <Button variant="outline" size="sm" asChild>
+                <Link to="/admin" className="flex items-center space-x-1">
+                  <Settings className="w-4 h-4" />
+                  <span className="hidden sm:inline">Admin</span>
+                </Link>
+              </Button>
+            )}
+            <UserProfile />
           </div>
         </div>
       </div>
@@ -112,3 +114,4 @@ export const Layout = ({ children }: LayoutProps) => {
     </div>
   );
 };
+
