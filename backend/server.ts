@@ -438,7 +438,61 @@ app.get(
 );
 
 
+// --- ✨ NEW: Route to handle community report submissions ---
+app.post(
+  "/api/community-reports",
+  authMiddleware, // Ensure the user is logged in
+  authorize(['public', 'researcher', 'policymaker', 'admin']), // Any logged-in user can report
+  upload.single("photo"), // Use multer to handle a file upload with the key "photo"
+  async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const user = req.user!;
+      const { latitude, longitude, category, description } = req.body;
+      const photoFile = req.file;
 
+      if (!latitude || !longitude || !photoFile) {
+        return res.status(400).json({ error: "Missing required fields: latitude, longitude, and photo are required." });
+      }
+
+      // 1. Upload the image to Supabase Storage
+      const filePath = `reports/${user.id}/${Date.now()}_${photoFile.originalname}`;
+      const { error: uploadError } = await supabaseAdmin.storage
+        .from('community-reports')
+        .upload(filePath, photoFile.buffer, {
+          contentType: photoFile.mimetype,
+        });
+
+      if (uploadError) throw uploadError;
+
+      // 2. Get the public URL of the uploaded image
+      const { data: { publicUrl } } = supabaseAdmin.storage
+        .from('community-reports')
+        .getPublicUrl(filePath);
+
+      // 3. Save the report details to the database table
+      const { data: report, error: reportError } = await supabaseAdmin
+        .from('community_reports')
+        .insert({
+          reporter_id: user.id,
+          latitude: parseFloat(latitude),
+          longitude: parseFloat(longitude),
+          category,
+          description,
+          image_url: publicUrl,
+        })
+        .select()
+        .single();
+      
+      if (reportError) throw reportError;
+
+      res.status(201).json(report);
+
+    } catch (err: any) {
+      console.error("🔥 Error creating community report:", err);
+      res.status(500).json({ error: "Failed to create community report." });
+    }
+  }
+);
 
 // ---------------- 404 Handler ----------------
 app.use((req: Request, res: Response) => {

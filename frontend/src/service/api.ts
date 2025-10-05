@@ -210,3 +210,40 @@ export const getPolicymakerDashboardData = async () => {
   return response.json();
 };
 
+
+// --- ✨ NEW: Function to submit a new community report ---
+export const createCommunityReport = async (reportData: {
+  latitude: number;
+  longitude: number;
+  category: string;
+  description: string;
+  photo: File;
+}) => {
+  const authHeader = await getAuthHeader();
+
+  // We use FormData because we are sending a file (the photo)
+  const formData = new FormData();
+  formData.append('latitude', String(reportData.latitude));
+  formData.append('longitude', String(reportData.longitude));
+  formData.append('category', reportData.category);
+  formData.append('description', reportData.description);
+  formData.append('photo', reportData.photo);
+
+  const response = await fetch(`${API_BASE}/api/community-reports`, {
+    method: 'POST',
+    headers: {
+      // Note: We don't set 'Content-Type' here; the browser does it for FormData
+      ...authHeader,
+    },
+    body: formData,
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json();
+    throw new Error(errorData.error || "Failed to submit report.");
+  }
+  return response.json();
+};
+
+//--------------------------- here the end of community report 
+

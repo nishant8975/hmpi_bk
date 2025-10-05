@@ -1,28 +1,29 @@
-import { Toaster } from "@/components/ui/toaster";
-import { Toaster as Sonner } from "@/components/ui/sonner";
-import { TooltipProvider } from "@/components/ui/tooltip";
+import { Toaster } from "./components/ui/toaster";
+import { Toaster as Sonner } from "./components/ui/sonner";
+import { TooltipProvider } from "./components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Routes, Route, Outlet } from "react-router-dom";
-import { Layout } from "@/components/Layout";
+import { Layout } from "./components/Layout";
 import { ThemeProvider } from "next-themes";
-import ProtectedRoute from '@/pages/routes/ProtectedRoute';
+import ProtectedRoute from './pages/routes/ProtectedRoute';
 
 // Pages
-import Dashboard from "@/pages/Dashboard";
-import Upload from "@/pages/Upload";
-import Results from "@/pages/Results";
-import Reports from "@/pages/Reports";
-import Help from "@/pages/Help";
-import AdminDashboard from "@/pages/AdminDashboard";
-import NotFound from "@/pages/NotFound";
-import Alerts from "@/pages/Alerts";
-import Collaboration from "@/pages/Collaboration";
-import Login from "@/pages/Login";
-import ProfilePage from "@/components/auth/ProfilePage"; 
-import AnalysisHistory from "@/pages/AnalysisHistory";
-import SiteDetailsPage from "@/pages/SiteDetailsPage";
+import Dashboard from "./pages/Dashboard";
+import Upload from "./pages/Upload";
+import Results from "./pages/Results";
+import Reports from "./pages/Reports";
+import Help from "./pages/Help";
+import AdminDashboard from "./pages/AdminDashboard";
+import NotFound from "./pages/NotFound";
+import Alerts from "./pages/Alerts";
+import Collaboration from "./pages/Collaboration";
+import Login from "./pages/Login";
+import ProfilePage from "./components/auth/ProfilePage";
+import AnalysisHistory from "./pages/AnalysisHistory";
+import SiteDetailsPage from "./pages/SiteDetailsPage";
+import CommunityReportPage from "./pages/CommunityReportPage";
 
-import '@/App.css';
+import './App.css';
 
 const queryClient = new QueryClient();
 
@@ -50,6 +51,7 @@ const App = () => (
               <Route path="/" element={<Dashboard />} />
               <Route path="/collaboration" element={<Collaboration />} />
               <Route path="/profile" element={<ProfilePage />} />
+              <Route path="/report-issue" element={<CommunityReportPage />} />
 
               {/* NESTED role-specific routes */}
               

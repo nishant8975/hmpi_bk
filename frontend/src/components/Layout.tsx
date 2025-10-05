@@ -13,13 +13,13 @@ import {
   Sun,
   Users,
   History,
-  FlaskConicalIcon,
-  Map // ✨ New Icon for Map View
+  Map,
+  MessageSquarePlus
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useTheme } from "next-themes";
-import { useAuth } from "../hooks/useAuth"; // For checking user role
-import UserProfile from "./auth/UserProfile"; // For the dropdown menu
+import { useAuth } from "@/hooks/useAuth";
+import UserProfile from "@/components/auth/UserProfile";
 
 interface LayoutProps {
   children: ReactNode;
@@ -28,7 +28,7 @@ interface LayoutProps {
 const Navigation = () => {
   const location = useLocation();
   const { theme, setTheme } = useTheme();
-  const { profile } = useAuth(); // Get the user's profile and role
+  const { profile } = useAuth();
   const isActive = (path: string) => location.pathname === path;
 
   // A complete list of all possible navigation items with their required roles
@@ -42,6 +42,7 @@ const Navigation = () => {
     { path: "/analysis-history", label: "Analysis History", icon: History, roles: ['researcher', 'admin'] },
     { path: "/reports", label: "Reports", icon: FileText, roles: ['policymaker', 'admin'] },
     { path: "/alerts", label: "Alerts", icon: AlertTriangle, roles: ['policymaker', 'researcher', 'admin'] },
+    { path: "/report-issue", label: "Report Issue", icon: MessageSquarePlus, roles: ['public', 'researcher', 'policymaker', 'admin'] },
     
     // Shared links
     { path: "/help", label: "Help", icon: HelpCircle, roles: ['public', 'researcher', 'policymaker', 'admin'] },
@@ -72,6 +73,7 @@ const Navigation = () => {
 
           {/* Dynamic Navigation */}
           <nav className="hidden md:flex items-center space-x-1">
+            {/* ✨ This mapping ensures every item uses the correct <Link> component */}
             {navItems.map(({ path, label, icon: Icon }) => (
               <Button
                 key={path}
@@ -87,9 +89,8 @@ const Navigation = () => {
             ))}
           </nav>
 
-          {/* Right side: Dark Mode + Admin + User Profile */}
+          {/* Right side Actions */}
           <div className="flex items-center space-x-2">
-            {/* Dark Mode Toggle */}
             <Button
               variant="ghost"
               size="sm"
@@ -97,8 +98,6 @@ const Navigation = () => {
             >
               {theme === "light" ? ( <Moon className="w-4 h-4" /> ) : ( <Sun className="w-4 h-4" /> )}
             </Button>
-
-            {/* Conditional Admin Access Button */}
             {profile?.role === 'admin' && (
               <Button variant="outline" size="sm" asChild>
                 <Link to="/admin" className="flex items-center space-x-1">
@@ -107,8 +106,6 @@ const Navigation = () => {
                 </Link>
               </Button>
             )}
-
-            {/* Functional User Profile Dropdown */}
             <UserProfile />
           </div>
         </div>
@@ -117,7 +114,7 @@ const Navigation = () => {
   );
 };
 
-export const Layout = ({ children }: LayoutProps) => {
+export const Layout = ({ children }: { children: ReactNode }) => {
   return (
     <div className="min-h-screen bg-background">
       <Navigation />
