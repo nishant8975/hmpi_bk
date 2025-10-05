@@ -1,6 +1,6 @@
 // src/routes/ProtectedRoute.tsx
 import { Navigate, Outlet } from 'react-router-dom';
-import { useAuth } from '../hooks/useAuth'; // Make sure the path is correct
+import { useAuth } from '@/hooks/useAuth'; // Make sure the path is correct
 
 interface ProtectedRouteProps {
   allowedRoles?: string[];

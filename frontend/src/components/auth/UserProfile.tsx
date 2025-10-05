@@ -1,6 +1,7 @@
-import { useAuth } from "@/hooks/useAuth";
-import { supabase } from "@/config/supabaseClient";
+import { useAuth } from "../../hooks/useAuth";
+import { supabase } from "../../config/supabaseClient";
 import { useNavigate } from "react-router-dom";
+import { useToast } from "../ui/use-toast"; // Import useToast for error feedback
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -16,22 +17,38 @@ import { LogOut, UserCircle, Settings } from 'lucide-react';
 const UserProfile = () => {
   const { user, profile } = useAuth();
   const navigate = useNavigate();
+  const { toast } = useToast(); // Initialize toast for feedback
 
+  // ✨ UPDATED: This function is now more robust.
   const handleLogout = async () => {
-    await supabase.auth.signOut();
-    navigate('/login');
+    try {
+      const { error } = await supabase.auth.signOut();
+      if (error) {
+        // If Supabase returns an error, show it to the user.
+        throw error;
+      }
+      // We no longer need navigate('/login') here.
+      // The onAuthStateChange listener in AuthProvider will detect the sign-out
+      // and the ProtectedRoute will automatically handle the redirect.
+      // This prevents the race condition.
+      toast({ title: "Logged Out", description: "You have been successfully signed out." });
+    } catch (error: any) {
+      toast({
+        variant: "destructive",
+        title: "Logout Failed",
+        description: error.message || "An unexpected error occurred.",
+      });
+    }
   };
 
   if (!user || !profile) {
     return null;
   }
 
-  // Use the initials of the full name for the avatar fallback
   const fallbackInitials = profile.full_name
     ? profile.full_name.split(' ').map(n => n[0]).join('').toUpperCase()
     : user.email!.charAt(0).toUpperCase();
   
-  // Capitalize the first letter of the role for display
   const displayRole = profile.role.charAt(0).toUpperCase() + profile.role.slice(1);
 
   return (
@@ -47,18 +64,15 @@ const UserProfile = () => {
       <DropdownMenuContent className="w-56" align="end" forceMount>
         <DropdownMenuLabel className="font-normal">
           <div className="flex flex-col space-y-1">
-            {/* ✨ Display Full Name instead of "Signed In As" */}
             <p className="text-sm font-medium leading-none">
               {profile.full_name || 'User'}
             </p>
-            {/* ✨ Display the user's role */}
             <p className="text-xs leading-none text-muted-foreground">
               {displayRole}
             </p>
           </div>
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
-        {/* ✨ "My Profile" link is now enabled */}
         <DropdownMenuItem onClick={() => navigate('/profile')} className="cursor-pointer">
           <UserCircle className="mr-2 h-4 w-4" />
           <span>My Profile</span>

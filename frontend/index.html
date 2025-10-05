@@ -3,22 +3,28 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    
     <title>HMPI Analyzer - Heavy Metal Pollution Index Calculator</title>
     <meta name="description" content="Professional HMPI analysis tool for groundwater heavy metal pollution assessment. Calculate and visualize Heavy Metal Pollution Index with interactive dashboards for researchers and policymakers." />
     <meta name="author" content="HMPI Analyzer" />
     <meta name="keywords" content="heavy metal pollution, HMPI, groundwater analysis, water quality, environmental monitoring" />
 
+    <!-- Open Graph / Facebook Meta Tags -->
     <meta property="og:title" content="HMPI Analyzer - Heavy Metal Pollution Index Calculator" />
     <meta property="og:description" content="Professional HMPI analysis tool for groundwater heavy metal pollution assessment. Calculate and visualize Heavy Metal Pollution Index with interactive dashboards." />
     <meta property="og:type" content="website" />
     <meta property="og:image" content="/hmpi-workflow.jpg" />
 
+    <!-- Twitter Meta Tags -->
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="HMPI Analyzer - Heavy Metal Pollution Index Calculator" />
     <meta name="twitter:description" content="Professional HMPI analysis tool for groundwater heavy metal pollution assessment." />
     <meta name="twitter:image" content="/hmpi-workflow.jpg" />
-  </head>
 
+    <!-- Leaflet CSS for Maps -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+  </head>
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>

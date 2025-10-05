@@ -12,13 +12,14 @@ import {
   Moon,
   Sun,
   Users,
-  History, // ✨ New Icon
-  FlaskConicalIcon
+  History,
+  FlaskConicalIcon,
+  Map // ✨ New Icon for Map View
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useTheme } from "next-themes";
-import { useAuth } from "@/hooks/useAuth";
-import UserProfile from "@/components/auth/userProfile"
+import { useAuth } from "../hooks/useAuth"; // For checking user role
+import UserProfile from "./auth/UserProfile"; // For the dropdown menu
 
 interface LayoutProps {
   children: ReactNode;
@@ -27,23 +28,32 @@ interface LayoutProps {
 const Navigation = () => {
   const location = useLocation();
   const { theme, setTheme } = useTheme();
-  const { profile } = useAuth();
+  const { profile } = useAuth(); // Get the user's profile and role
   const isActive = (path: string) => location.pathname === path;
 
-  // ✨ Updated Navigation items with new roles and pages
+  // A complete list of all possible navigation items with their required roles
   const allNavItems = [
+    // Public User links
+    { path: "/", label: "Map View", icon: Map, roles: ['public'] },
+
+    // Professional User links
     { path: "/", label: "Dashboard", icon: BarChart3, roles: ['researcher', 'policymaker', 'admin'] },
     { path: "/upload", label: "Upload Data", icon: Upload, roles: ['researcher', 'admin'] },
-    { path: "/results", label: "Results", icon: FlaskConicalIcon, roles: ['researcher', 'admin'] },
     { path: "/analysis-history", label: "Analysis History", icon: History, roles: ['researcher', 'admin'] },
-    { path: "/reports", label: "Official Reports", icon: FileText, roles: ['policymaker', 'admin'] },
-    // 👇 THE CHANGE IS HERE: 'researcher' has been added to this list
+    { path: "/reports", label: "Reports", icon: FileText, roles: ['policymaker', 'admin'] },
     { path: "/alerts", label: "Alerts", icon: AlertTriangle, roles: ['policymaker', 'researcher', 'admin'] },
-    { path: "/collaboration", label: "Collaboration", icon: Users, roles: ['researcher', 'policymaker', 'admin'] },
+    
+    // Shared links
     { path: "/help", label: "Help", icon: HelpCircle, roles: ['public', 'researcher', 'policymaker', 'admin'] },
   ];
 
-  const navItems = allNavItems.filter(item => profile && item.roles.includes(profile.role));
+  // Filter the navigation items based on the current user's role
+  const navItems = allNavItems.filter(item => {
+    // If user is not logged in, only show items available to 'public'
+    if (!profile) return item.roles.includes('public');
+    // If user is logged in, show items that include their role
+    return item.roles.includes(profile.role);
+  });
 
   return (
     <header className="border-b bg-card shadow-card">
@@ -60,17 +70,14 @@ const Navigation = () => {
             </div>
           </Link>
 
-          {/* Navigation */}
+          {/* Dynamic Navigation */}
           <nav className="hidden md:flex items-center space-x-1">
             {navItems.map(({ path, label, icon: Icon }) => (
               <Button
                 key={path}
                 asChild
                 variant={isActive(path) ? "default" : "ghost"}
-                className={cn(
-                  "flex items-center space-x-2",
-                  isActive(path) && "shadow-elegant"
-                )}
+                className={cn( "flex items-center space-x-2", isActive(path) && "shadow-elegant" )}
               >
                 <Link to={path}>
                   <Icon className="w-4 h-4" />
@@ -82,14 +89,16 @@ const Navigation = () => {
 
           {/* Right side: Dark Mode + Admin + User Profile */}
           <div className="flex items-center space-x-2">
+            {/* Dark Mode Toggle */}
             <Button
               variant="ghost"
-              size="icon"
-              className="h-9 w-9"
+              size="sm"
               onClick={() => setTheme(theme === "light" ? "dark" : "light")}
             >
-              {theme === "light" ? <Moon className="w-4 h-4" /> : <Sun className="w-4 h-4" />}
+              {theme === "light" ? ( <Moon className="w-4 h-4" /> ) : ( <Sun className="w-4 h-4" /> )}
             </Button>
+
+            {/* Conditional Admin Access Button */}
             {profile?.role === 'admin' && (
               <Button variant="outline" size="sm" asChild>
                 <Link to="/admin" className="flex items-center space-x-1">
@@ -98,6 +107,8 @@ const Navigation = () => {
                 </Link>
               </Button>
             )}
+
+            {/* Functional User Profile Dropdown */}
             <UserProfile />
           </div>
         </div>

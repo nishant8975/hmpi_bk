@@ -186,3 +186,27 @@ export const getSiteDetails = async (siteId: string): Promise<any> => {
   return response.json();
 };
 
+
+// --- ✨ NEW: Function to get map data ---
+export const getMapData = async (): Promise<any[]> => {
+  const response = await fetch(`${API_BASE}/api/map-data`);
+  if (!response.ok) {
+    const errorData = await response.json();
+    throw new Error(errorData.error || 'Failed to fetch map data.');
+  }
+  return response.json();
+};
+
+// --- ✨ NEW: Function to get all data for the Policymaker Dashboard ---
+export const getPolicymakerDashboardData = async () => {
+  const authHeader = await getAuthHeader();
+  const response = await fetch(`${API_BASE}/api/dashboard/policymaker`, {
+    headers: { ...authHeader },
+  });
+  if (!response.ok) {
+    const errorData = await response.json();
+    throw new Error(errorData.error || 'Failed to fetch policymaker dashboard data.');
+  }
+  return response.json();
+};
+

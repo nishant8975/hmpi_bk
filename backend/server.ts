@@ -359,6 +359,87 @@ app.get(
   }
 );
 
+
+app.get("/api/map-data", (req: Request, res: Response) => {
+  try {
+    // This function generates a set of realistic mock data points.
+    // We can easily replace this with a real database query later.
+    const mockMapData = [
+      { id: 1, site: "Mula River - Aundh Bridge", latitude: 18.558, longitude: 73.806, risk_level: "High" },
+      { id: 2, site: "Pawana River - Pimpri", latitude: 18.62, longitude: 73.79, risk_level: "Critical" },
+      { id: 3, site: "Indrayani River - Dehu", latitude: 18.72, longitude: 73.76, risk_level: "Moderate" },
+      { id: 4, site: "Bhima River - Koregaon", latitude: 18.42, longitude: 74.05, risk_level: "Safe" },
+      { id: 5, site: "Mutha River - Deccan", latitude: 18.51, longitude: 73.83, risk_level: "High" },
+    ];
+    res.json(mockMapData);
+  } catch (err: any) {
+    console.error("🔥 Error generating mock map data:", err);
+    res.status(500).json({ error: "Failed to generate map data." });
+  }
+});
+
+
+app.get(
+  "/api/dashboard/policymaker",
+  authMiddleware,
+  authorize(['policymaker', 'admin']), // Only policymakers and admins can access this
+  async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      // 1. Get Key Statistics
+      const { count: totalSites, error: sitesError } = await supabaseAdmin
+        .from('locations')
+        .select('*', { count: 'exact', head: true });
+
+      if (sitesError) throw sitesError;
+
+      const { count: highRiskSites, error: riskError } = await supabaseAdmin
+        .from('pollution_indices')
+        .select('*', { count: 'exact', head: true })
+        .in('risk_level', ['high', 'critical']);
+        // Note: This is a simplified count. A more advanced query would only count the latest sample for each site.
+
+      if (riskError) throw riskError;
+
+      const { count: activeAlerts, error: alertsCountError } = await supabaseAdmin
+        .from('alerts')
+        .select('*', { count: 'exact', head: true })
+        .eq('status', 'Pending'); // Or whatever your active status is
+
+      if (alertsCountError) throw alertsCountError;
+
+      // 2. Get latest alerts (top 5)
+      const { data: latestAlerts, error: alertsError } = await supabaseAdmin
+        .from('alerts')
+        .select(`
+          id,
+          title,
+          created_at,
+          water_samples ( locations ( site ) )
+        `)
+        .order('created_at', { ascending: false })
+        .limit(5);
+      
+      if (alertsError) throw alertsError;
+
+      res.json({
+        stats: {
+          totalSites: totalSites ?? 0,
+          highRiskSites: highRiskSites ?? 0,
+          activeAlerts: activeAlerts ?? 0,
+        },
+        latestAlerts: latestAlerts,
+      });
+
+    } catch (err: any) {
+      console.error("🔥 Error fetching policymaker dashboard data:", err);
+      res.status(500).json({ error: "Failed to fetch dashboard data." });
+    }
+  }
+);
+
+
+
+
 // ---------------- 404 Handler ----------------
 app.use((req: Request, res: Response) => {
   res.status(404).json({ error: "Route not found." });

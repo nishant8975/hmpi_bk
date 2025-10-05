@@ -5,7 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Routes, Route, Outlet } from "react-router-dom";
 import { Layout } from "@/components/Layout";
 import { ThemeProvider } from "next-themes";
-import ProtectedRoute from '@/routes/ProtectedRoute';
+import ProtectedRoute from '@/pages/routes/ProtectedRoute';
 
 // Pages
 import Dashboard from "@/pages/Dashboard";
