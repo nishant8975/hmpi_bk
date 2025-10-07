@@ -1,4 +1,4 @@
-import { useAuth } from "../hooks/useAuth";
+import { useAuth } from "@/hooks/useAuth";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -6,11 +6,12 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Loader2, AlertCircle, Upload, History, BellPlus } from "lucide-react";
-import { getResearcherDashboardData } from "../service/api";
-import MapView from '../pages/map view/MapView';
-import PolicymakerDashboard from './PolicymakerDashboard';
-import PublicDashboard from './PublicDashboard'; 
+import { getResearcherDashboardData } from "@/service/api";
 
+// Import the other dashboards
+import PolicymakerDashboard from '@/pages/PolicymakerDashboard';
+import PublicDashboard from '@/pages/PublicDashboard';
+import AdminDashboard from '@/pages/AdminDashboard';
 
 const getRiskBadgeVariant = (risk?: string): "default" | "secondary" | "destructive" | "outline" => {
   switch (risk?.toLowerCase()) {
@@ -96,7 +97,12 @@ const ResearcherDashboard = () => {
 const Dashboard = () => {
     const { profile } = useAuth();
 
-    if (profile?.role === 'researcher' || profile?.role === 'admin') {
+    // ✨ Check for the most specific roles first
+    if (profile?.role === 'admin') {
+        return <AdminDashboard />;
+    }
+
+    if (profile?.role === 'researcher') {
         return <ResearcherDashboard />;
     }
     
@@ -104,11 +110,8 @@ const Dashboard = () => {
         return <PolicymakerDashboard />;
     }
 
-     // ✨ 2. For "public" users, show the new dashboard with the map and calculator
+    // Default to the Public Dashboard
     return <PublicDashboard />;
-
-    // For "public" users, show the interactive map
-    
 };
 
 export default Dashboard;

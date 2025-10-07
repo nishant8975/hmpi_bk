@@ -247,3 +247,43 @@ export const createCommunityReport = async (reportData: {
 
 //--------------------------- here the end of community report 
 
+
+// --- ✨ NEW: Admin-specific API functions ---
+
+/**
+ * Fetches a list of all users from the backend. (Admin only)
+ */
+export const getAllUsers = async (): Promise<any[]> => {
+  const authHeader = await getAuthHeader();
+  const response = await fetch(`${API_BASE}/api/admin/users`, {
+    headers: { ...authHeader },
+  });
+  if (!response.ok) {
+    const errorData = await response.json();
+    throw new Error(errorData.error || 'Failed to fetch users.');
+  }
+  return response.json();
+};
+
+/**
+ * Updates a specific user's role. (Admin only)
+ * @param userId The ID of the user to update.
+ * @param role The new role to assign ('public', 'researcher', etc.).
+ */
+export const updateUserRole = async (userId: string, role: string): Promise<any> => {
+  const authHeader = await getAuthHeader();
+  const response = await fetch(`${API_BASE}/api/admin/users/${userId}/role`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+      ...authHeader,
+    },
+    body: JSON.stringify({ role }),
+  });
+  if (!response.ok) {
+    const errorData = await response.json();
+    throw new Error(errorData.error || 'Failed to update user role.');
+  }
+  return response.json();
+};
+

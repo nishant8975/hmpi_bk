@@ -494,6 +494,40 @@ app.post(
   }
 );
 
+
+
+// --- ✨ CORRECTED: Admin endpoint now uses a direct query ---
+app.get(
+  "/api/admin/users",
+  authMiddleware,
+  authorize(['admin']), // ✅ Only admins can access
+  async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      // ✅ Call the secure SQL function instead of manual join
+      const { data: users, error } = await supabaseAdmin.rpc('get_all_users_with_profiles');
+
+      if (error) throw error;
+
+      // ✅ Optional: format data (if needed)
+      const formattedUsers = users.map((u: any) => ({
+        id: u.id,
+        full_name: u.full_name,
+        role: u.role,
+        email: u.email,
+        created_at: u.created_at,
+      }));
+
+      res.status(200).json(formattedUsers);
+    } catch (err: any) {
+      console.error("🔥 Error fetching all users for admin:", err);
+      res.status(500).json({ error: "Failed to fetch user list." });
+    }
+  }
+);
+
+
+
+
 // ---------------- 404 Handler ----------------
 app.use((req: Request, res: Response) => {
   res.status(404).json({ error: "Route not found." });
