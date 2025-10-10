@@ -23,6 +23,9 @@ import AnalysisHistory from "./pages/AnalysisHistory";
 import SiteDetailsPage from "./pages/SiteDetailsPage";
 import CommunityReportPage from "./pages/CommunityReportPage";
 
+// Import Landing Page
+import LandingPage from "./pages/LandingPage"; // Add this import
+
 import './App.css';
 
 const queryClient = new QueryClient();
@@ -41,6 +44,7 @@ const App = () => (
         <Sonner />
         <Routes>
           {/* --- Public Routes (No Layout) --- */}
+          <Route path="/" element={<LandingPage />} /> {/* Add Landing Page Route */}
           <Route path="/login" element={<Login />} />
           <Route path="/help" element={<Help />} />
 
@@ -48,7 +52,7 @@ const App = () => (
           <Route element={<ProtectedRoute />}>
             <Route element={<ProtectedLayout />}>
               {/* Routes for ANY logged-in user */}
-              <Route path="/" element={<Dashboard />} />
+              <Route path="/dashboard" element={<Dashboard />} />
               <Route path="/collaboration" element={<Collaboration />} />
               <Route path="/profile" element={<ProfilePage />} />
               <Route path="/report-issue" element={<CommunityReportPage />} />

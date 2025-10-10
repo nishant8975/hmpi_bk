@@ -38,8 +38,8 @@ const Navigation = () => {
 
     // Professional User links
     { path: "/", label: "Dashboard", icon: BarChart3, roles: ['researcher', 'policymaker', 'admin'] },
-    { path: "/upload", label: "Upload Data", icon: Upload, roles: ['researcher', 'admin'] },
-    { path: "/analysis-history", label: "Analysis History", icon: History, roles: ['researcher', 'admin'] },
+    { path: "/upload", label: "Upload Data", icon: Upload, roles: ['researcher'] },
+    { path: "/analysis-history", label: "Analysis History", icon: History, roles: ['researcher'] },
     { path: "/reports", label: "Reports", icon: FileText, roles: ['policymaker', 'admin'] },
     { path: "/alerts", label: "Alerts", icon: AlertTriangle, roles: ['policymaker', 'researcher', 'admin'] },
     { path: "/report-issue", label: "Report Issue", icon: MessageSquarePlus, roles: ['public', 'researcher', 'policymaker', 'admin'] },

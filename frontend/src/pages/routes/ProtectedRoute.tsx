@@ -1,32 +1,28 @@
-// src/routes/ProtectedRoute.tsx
 import { Navigate, Outlet } from 'react-router-dom';
-import { useAuth } from '@/hooks/useAuth'; // Make sure the path is correct
+import { useAuth } from '@/hooks/useAuth';
 
 interface ProtectedRouteProps {
   allowedRoles?: string[];
 }
 
 const ProtectedRoute = ({ allowedRoles }: ProtectedRouteProps) => {
-  const { user, profile, loading } = useAuth();
+  // We only need user and profile here.
+  // We trust AuthProvider to handle the 'loading' state.
+  const { user, profile } = useAuth();
 
-  // 1. While the session is loading, show a loading message
-  if (loading) {
-    return <div>Loading session...</div>;
-  }
-
-  // 2. If no user is logged in, redirect to the login page
+  // If the AuthProvider is finished and there's still no user, redirect.
   if (!user) {
     return <Navigate to="/login" replace />;
   }
 
-  // 3. If the route requires a specific role and the user's role doesn't match, redirect
-  if (allowedRoles && !allowedRoles.includes(profile?.role)) {
-    // You can redirect to a dedicated 'unauthorized' page or a general dashboard
+  // If the user doesn't have the required role, redirect.
+  if (allowedRoles && (!profile || !allowedRoles.includes(profile.role))) {
     return <Navigate to="/unauthorized" replace />;
   }
 
-  // 4. If all checks pass, render the requested page
+  // If all checks pass, render the page.
   return <Outlet />;
 };
 
 export default ProtectedRoute;
+

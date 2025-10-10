@@ -1,25 +1,21 @@
-// src/contexts/AuthProvider.tsx
-import { createContext, useState, useEffect, ReactNode, useContext } from 'react';
-import { supabase } from '../config/supabaseClient'; // Make sure this path is correct
+import { createContext, useState, useEffect, ReactNode } from 'react';
+import { supabase } from '../config/supabaseClient';
 import { Session, User } from '@supabase/supabase-js';
+import { Loader2 } from 'lucide-react';
 
-// Define the shape of your user profile data
 interface Profile {
   id: string;
   full_name: string;
   role: 'admin' | 'policymaker' | 'researcher' | 'public';
 }
 
-// Define what the context will provide
 interface AuthContextType {
   session: Session | null;
   user: User | null;
-
   profile: Profile | null;
-  loading: boolean;
+  loading: boolean; // This is our single source of truth
 }
 
-// Create the context
 export const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
@@ -29,49 +25,92 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // This function runs once to get the initial session and profile
-    const getInitialSession = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      setSession(session);
-      setUser(session?.user ?? null);
+    let ignore = false;
 
-      // If a user is logged in, fetch their profile
-      if (session?.user) {
-        const { data: profileData } = await supabase
-          .from('profiles')
-          .select('*')
-          .eq('id', session.user.id)
-          .single();
-        setProfile(profileData);
+    const initAuth = async () => {
+      try {
+        // ✅ Get current active session on first load
+        const { data, error } = await supabase.auth.getSession();
+        if (error) throw error;
+
+        const currentSession = data?.session ?? null;
+        const currentUser = currentSession?.user ?? null;
+
+        if (!ignore) {
+          setSession(currentSession);
+          setUser(currentUser);
+        }
+
+        // ✅ Fetch profile only if user exists
+        if (currentUser) {
+          const { data: profileData, error: profileError } = await supabase
+            .from('profiles')
+            .select('*')
+            .eq('id', currentUser.id)
+            .single();
+
+          if (profileError) throw profileError;
+          if (!ignore) setProfile(profileData);
+        }
+      } catch (error) {
+        console.error('Initial Auth Load Error:', error);
+        if (!ignore) {
+          setSession(null);
+          setUser(null);
+          setProfile(null);
+        }
+      } finally {
+        if (!ignore) setLoading(false);
       }
-      setLoading(false);
     };
 
-    getInitialSession();
+    initAuth();
 
-    // This listener reacts to auth changes (login, logout)
+    // ✅ Listen for future auth changes (login/logout)
     const { data: listener } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      if (session?.user) {
-         const { data: profileData } = await supabase
-          .from('profiles')
-          .select('*')
-          .eq('id', session.user.id)
-          .single();
-        setProfile(profileData);
-      } else {
-        setProfile(null); // Clear profile on logout
+      try {
+        setSession(session);
+        setUser(session?.user ?? null);
+
+        if (session?.user) {
+          const { data: profileData, error: profileError } = await supabase
+            .from('profiles')
+            .select('*')
+            .eq('id', session.user.id)
+            .single();
+
+          if (profileError) throw profileError;
+          setProfile(profileData);
+        } else {
+          setProfile(null);
+        }
+      } catch (error) {
+        console.error('Auth State Change Error:', error);
+        setSession(null);
+        setUser(null);
+        setProfile(null);
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
     });
 
-    // Cleanup the listener when the component unmounts
-    return () => listener?.subscription.unsubscribe();
+    return () => {
+      ignore = true;
+      listener?.subscription.unsubscribe();
+    };
   }, []);
 
   const value = { session, user, profile, loading };
 
-  // Don't render the rest of the app until the initial auth check is complete
-  return <AuthContext.Provider value={value}>{!loading && children}</AuthContext.Provider>;
+  // ✅ While checking auth, show full-page spinner
+  if (loading) {
+    return (
+      <div className="flex justify-center items-center h-screen w-screen bg-background">
+        <Loader2 className="h-12 w-12 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  // ✅ Once loading is done, render app with auth context
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
