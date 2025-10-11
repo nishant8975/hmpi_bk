@@ -7,6 +7,8 @@ import { Layout } from "./components/Layout";
 import { ThemeProvider } from "next-themes";
 import ProtectedRoute from './pages/routes/ProtectedRoute';
 
+
+
 // Pages
 import Dashboard from "./pages/Dashboard";
 import Upload from "./pages/Upload";
