@@ -1,0 +1,44 @@
+{
+  "rewrites": [
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ]
+}
+
+```
+
+After you create this file, push it to your GitHub repository. Vercel will automatically redeploy, and this will solve the 404 error on page reloads.
+
+---
+
+### **Problem 2: Intermittent Data Fetching Failures**
+
+You mentioned that sometimes the dashboard data doesn't load. This is a very common symptom of a **"cold start"** on Render's free tier.
+
+* **What's Happening:** To save resources, Render's free servers "go to sleep" after about 15 minutes of inactivity. When a new request comes in (like when you load your dashboard), the server has to wake up. This can take anywhere from a few seconds to a full minute. If the request from your frontend "times out" before the server is fully awake, you will get a connection error, and your data won't load.
+* **The Solution:** While the only way to completely eliminate cold starts is to upgrade to a paid plan on Render, we can make your frontend application more resilient to them. We will tell TanStack Query (your data-fetching library) to automatically retry a failed request a few times before showing an error.
+
+**Your Action: Update your Data Fetching Logic**
+In your frontend code, wherever you are using `useQuery` to fetch data from the backend, add a `retry` option.
+
+For example, in your **`AdminDashboard.tsx`** file, find your `useQuery` call:
+
+```tsx
+// Find this in your dashboard components
+const { data, isLoading, error } = useQuery({
+  queryKey: ['someData'],
+  queryFn: getSomeData,
+});
+```
+
+**Update it to add the `retry` option:**
+
+```tsx
+// Add the retry option
+const { data, isLoading, error } = useQuery({
+  queryKey: ['someData'],
+  queryFn: getSomeData,
+  retry: 3, // ✨ This tells it to retry 3 times before failing
+});
