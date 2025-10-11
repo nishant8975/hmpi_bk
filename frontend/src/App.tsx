@@ -24,6 +24,7 @@ import ProfilePage from "./components/auth/ProfilePage";
 import AnalysisHistory from "./pages/AnalysisHistory";
 import SiteDetailsPage from "./pages/SiteDetailsPage";
 import CommunityReportPage from "./pages/CommunityReportPage";
+ 
 
 // Import Landing Page
 import LandingPage from "./pages/LandingPage"; // Add this import
