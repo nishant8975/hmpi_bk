@@ -525,6 +525,13 @@ app.get(
   }
 );
 
+// --- ✨ NEW: Health Check Endpoint for the Keep-Alive Service ---
+app.get("/health", (req, res) => {
+  res.status(200).send("OK");
+});
+
+
+
 
 
 
