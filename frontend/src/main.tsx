@@ -6,14 +6,20 @@ import { AuthProvider } from './contexts/AuthProvider';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import './index.css';
 
-// 1. Create a QueryClient with default options
+// 1. Create a QueryClient with a more robust retry strategy
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      // ✨ THE FIX: Set the default retry count for ALL queries to 3.
-      // This will automatically handle cold starts by giving the server
-      // more time to wake up before failing.
+      // ✨ THE FIX (ENHANCED VERSION) ✨
+      
+      // Still retry up to 3 times...
       retry: 3,
+      
+      // ...but now, wait longer between each attempt.
+      // 1st retry: wait 2 seconds
+      // 2nd retry: wait 4 seconds
+      // 3rd retry: wait 8 seconds
+      retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000),
     },
   },
 });
@@ -30,4 +36,5 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
     </BrowserRouter>
   </React.StrictMode>
 );
+
 
