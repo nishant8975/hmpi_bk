@@ -1,7 +1,6 @@
 import { supabase } from '@/config/supabaseClient';
 
-const API_BASE = "http://localhost:5000";
-
+const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:5000";
 // Helper function to get the auth header
 const getAuthHeader = async () => {
   const { data: { session }, error } = await supabase.auth.getSession();
