@@ -14,6 +14,7 @@ const requiredHeaders = [
   "Ni",
   "Pb",
   "Zn",
+  "Hg",
 ];
 
 const WHO_STANDARDS: Record<string, number> = {
@@ -26,19 +27,24 @@ const WHO_STANDARDS: Record<string, number> = {
   Ni: 0.07,
   Pb: 0.01,
   Zn: 5.0,
+  Hg: 0.006,
 };
 
 // ---------------- Header Validation ----------------
 export function validateHeaders(headers: string[]): true | string {
   const missing = requiredHeaders.filter((h) => !headers.includes(h));
+
   if (missing.length > 0) {
     return `Missing required headers: ${missing.join(", ")}`;
   }
+
   return true;
 }
 
 // ---------------- Risk Classification ----------------
-export function classifyRisk(hmpi: number): "safe" | "moderate" | "high" | "critical" {
+export function classifyRisk(
+  hmpi: number
+): "safe" | "moderate" | "high" | "critical" {
   if (hmpi <= 100) return "safe";
   if (hmpi <= 200) return "moderate";
   if (hmpi <= 300) return "high";
@@ -53,6 +59,7 @@ export function calculateHMPI(row: Record<string, string | number>) {
 
   const lat = parseFloat(String(row.Latitude));
   const lon = parseFloat(String(row.Longitude));
+
   if (Number.isNaN(lat) || Number.isNaN(lon)) {
     throw new Error(
       `Invalid coordinates for site "${row.Site}". Latitude and Longitude must be valid numbers.`
@@ -64,38 +71,45 @@ export function calculateHMPI(row: Record<string, string | number>) {
 
   for (const metal of metals) {
     const valRaw = row[metal];
+
     if (valRaw === undefined || valRaw === null || valRaw === "") {
       throw new Error(`Missing value for metal ${metal} in site "${row.Site}".`);
     }
+
     const val = parseFloat(String(valRaw));
+
     if (Number.isNaN(val) || val < 0) {
       throw new Error(
         `Invalid numeric value for metal ${metal} in site "${row.Site}". Must be non-negative number.`
       );
     }
+
     concentrations[metal] = val;
   }
 
   let numerator = 0;
   let denominator = 0;
+
   const keyContaminants: string[] = [];
 
   for (const metal of metals) {
     const Mi = concentrations[metal];
     const Si = WHO_STANDARDS[metal];
+
     const Qi = (Mi / Si) * 100;
     const Wi = 1 / Si;
 
     numerator = math.add(numerator, math.multiply(Qi, Wi)) as number;
     denominator = math.add(denominator, Wi) as number;
 
-    if (Mi > Si) keyContaminants.push(metal);
+    if (Mi > Si) {
+      keyContaminants.push(metal);
+    }
   }
 
   const hmpiValue = numerator / denominator;
   const riskLevel = classifyRisk(hmpiValue);
 
-  // ✅ Match frontend expected fields
   return {
     Location: String(row.Site).trim(),
     Latitude: lat,
@@ -107,8 +121,18 @@ export function calculateHMPI(row: Record<string, string | number>) {
 }
 
 // ---------------- CSV Export ----------------
-export function convertResultsToCSV(results: ReturnType<typeof calculateHMPI>[]) {
-  const header = ["Location", "Latitude", "Longitude", "HMPI", "RiskLevel", "KeyContaminants"];
+export function convertResultsToCSV(
+  results: ReturnType<typeof calculateHMPI>[]
+) {
+  const header = [
+    "Location",
+    "Latitude",
+    "Longitude",
+    "HMPI",
+    "RiskLevel",
+    "KeyContaminants",
+  ];
+
   const lines = [header.join(",")];
 
   for (const res of results) {
@@ -120,17 +144,22 @@ export function convertResultsToCSV(results: ReturnType<typeof calculateHMPI>[])
       `"${escapeCsvField(res.RiskLevel)}"`,
       `"${escapeCsvField(res.KeyContaminants.join(";"))}"`,
     ];
+
     lines.push(line.join(","));
   }
+
   return lines.join("\n");
 }
 
 function escapeCsvField(field: unknown) {
   if (typeof field !== "string") return field;
+
   const escaped = field.replace(/"/g, '""');
+
   if (/[,\"\n]/.test(field)) {
     return `"${escaped}"`;
   }
+
   return escaped;
 }
 
@@ -138,6 +167,7 @@ function escapeCsvField(field: unknown) {
 export function convertResultsToExcelBuffer(
   results: ReturnType<typeof calculateHMPI>[]
 ): Buffer {
+
   const data = results.map((res) => ({
     Location: res.Location,
     Latitude: res.Latitude,
@@ -161,7 +191,11 @@ export function convertResultsToExcelBuffer(
   worksheet["!freeze"] = { xSplit: 0, ySplit: 1 };
 
   const workbook = XLSX.utils.book_new();
+
   XLSX.utils.book_append_sheet(workbook, worksheet, "HMPI Results");
 
-  return XLSX.write(workbook, { type: "buffer", bookType: "xlsx" }) as Buffer;
+  return XLSX.write(workbook, {
+    type: "buffer",
+    bookType: "xlsx",
+  }) as Buffer;
 }
