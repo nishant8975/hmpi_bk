@@ -5,9 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Routes, Route, Outlet } from "react-router-dom";
 import { Layout } from "./components/Layout";
 import { ThemeProvider } from "next-themes";
-import ProtectedRoute from './pages/routes/ProtectedRoute';
-
-
+import ProtectedRoute from "./pages/routes/ProtectedRoute";
 
 // Pages
 import Dashboard from "./pages/Dashboard";
@@ -24,12 +22,14 @@ import ProfilePage from "./components/auth/ProfilePage";
 import AnalysisHistory from "./pages/AnalysisHistory";
 import SiteDetailsPage from "./pages/SiteDetailsPage";
 import CommunityReportPage from "./pages/CommunityReportPage";
- 
+import LandingPage from "./pages/LandingPage";
 
-// Import Landing Page
-import LandingPage from "./pages/LandingPage"; // Add this import
+// ✅ Import Your Separate ChatBot File
+import HMPIChatBot from "./components/HMPIChatBot"; 
+// 🔁 If it's inside pages folder use:
+// import HMPIChatBot from "./pages/HMPIChatBot";
 
-import './App.css';
+import "./App.css";
 
 const queryClient = new QueryClient();
 
@@ -45,24 +45,22 @@ const App = () => (
       <TooltipProvider>
         <Toaster />
         <Sonner />
+
         <Routes>
-          {/* --- Public Routes (No Layout) --- */}
-          <Route path="/" element={<LandingPage />} /> {/* Add Landing Page Route */}
+          {/* --- Public Routes --- */}
+          <Route path="/" element={<LandingPage />} />
           <Route path="/login" element={<Login />} />
           <Route path="/help" element={<Help />} />
 
-          {/* --- Protected Routes (All use the main Layout) --- */}
+          {/* --- Protected Routes --- */}
           <Route element={<ProtectedRoute />}>
             <Route element={<ProtectedLayout />}>
-              {/* Routes for ANY logged-in user */}
+
               <Route path="/dashboard" element={<Dashboard />} />
               <Route path="/collaboration" element={<Collaboration />} />
               <Route path="/profile" element={<ProfilePage />} />
               <Route path="/report-issue" element={<CommunityReportPage />} />
 
-              {/* NESTED role-specific routes */}
-              
-              {/* Routes for Researchers & Admins */}
               <Route element={<ProtectedRoute allowedRoles={['researcher', 'admin']} />}>
                 <Route path="/upload" element={<Upload />} />
                 <Route path="/results" element={<Results />} />
@@ -70,26 +68,30 @@ const App = () => (
                 <Route path="/site/:siteId" element={<SiteDetailsPage />} />
               </Route>
 
-              {/* Routes for Policymakers, Researchers & Admins */}
               <Route element={<ProtectedRoute allowedRoles={['policymaker', 'researcher', 'admin']} />}>
                 <Route path="/reports" element={<Reports />} />
-                <Route path="/alerts" element={<Alerts />} />  
+                <Route path="/alerts" element={<Alerts />} />
               </Route>
 
-              {/* Routes for Admins ONLY */}
               <Route element={<ProtectedRoute allowedRoles={['admin']} />}>
                 <Route path="/admin" element={<AdminDashboard />} />
               </Route>
+
             </Route>
           </Route>
 
-          {/* --- Catch-all route must stay at the very bottom --- */}
           <Route path="*" element={<NotFound />} />
         </Routes>
       </TooltipProvider>
     </ThemeProvider>
+
+    {/* ✅ ALWAYS FLOATING – Bottom Right */}
+    <div className="fixed bottom-6 right-6 z-[9999]">
+      <HMPIChatBot />
+    </div>
+
   </QueryClientProvider>
 );
 
-export default App;
 
+export default App;
