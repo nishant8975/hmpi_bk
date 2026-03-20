@@ -263,6 +263,59 @@ export const getLatestResearcherSiteReport = async (siteId: string) => {
   return response.json();
 };
 
+// --- Researcher editable site report (draft/readonly depending on status) ---
+export const getResearcherSiteReport = async (siteId: string) => {
+  const authHeader = await getAuthHeader();
+  const response = await fetch(`${API_BASE}/api/sites/${siteId}/reports/researcher`, {
+    headers: { ...authHeader },
+  });
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => null);
+    throw new Error(errorData?.error || "Failed to fetch researcher site report.");
+  }
+  return response.json();
+};
+
+export const saveResearcherSiteReport = async (
+  siteId: string,
+  payload: {
+    report_text: string;
+    site_description: string;
+    recommendation: string;
+    trend_summary?: string;
+  }
+) => {
+  const authHeader = await getAuthHeader();
+  const response = await fetch(`${API_BASE}/api/sites/${siteId}/reports/researcher`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...authHeader,
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => null);
+    throw new Error(errorData?.error || "Failed to save researcher site report.");
+  }
+
+  return response.json();
+};
+
+// --- Latest policymaker decision for a site ---
+export const getLatestSiteDecision = async (siteId: string) => {
+  const authHeader = await getAuthHeader();
+  const response = await fetch(`${API_BASE}/api/sites/${siteId}/decisions/latest`, {
+    headers: { ...authHeader },
+  });
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => null);
+    throw new Error(errorData?.error || "Failed to fetch site decision.");
+  }
+  return response.json();
+};
+
 // --- Per-site report download ---
 export const downloadSiteReport = async (siteId: string, format: "csv" | "excel") => {
   const authHeader = await getAuthHeader();

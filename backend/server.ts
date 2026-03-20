@@ -45,7 +45,14 @@ interface AuthenticatedRequest extends Request {
 }
 
 const authMiddleware = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
-  const token = req.headers.authorization?.split(" ")[1];
+  // Regular REST calls use `Authorization: Bearer <token>`.
+  // SSE uses EventSource (no custom headers), so we allow `access_token` as query param.
+  const tokenFromHeader = req.headers.authorization?.split(" ")[1];
+  const tokenFromQuery =
+    typeof (req.query as any)?.access_token === "string"
+      ? (req.query as any).access_token
+      : undefined;
+  const token = tokenFromHeader || tokenFromQuery;
   if (!token) return res.status(401).json({ error: "Authentication required." });
 
   try {
@@ -74,6 +81,39 @@ const authorize = (allowedRoles: string[]) => {
     }
     next();
   };
+};
+
+// -------------------- Realtime (SSE) --------------------
+// Simple in-memory SSE broker. We only emit "something changed" events (no private content).
+type SseClient = { res: Response; role: string; userId: string };
+const sseClientsByUserId = new Map<string, SseClient>();
+
+// Alert title prefixes (we use these instead of relying on `alerts.status` enum values
+// because your DB enum does not include values like "Draft").
+const REPORT_DRAFT_PREFIX = "Researcher Draft Report:";
+const REPORT_FULL_PREFIX = "Researcher Full Report:";
+const POLICEMAKER_DECISION_PREFIX = "Policymaker Decision:";
+
+const writeSse = (client: SseClient, eventName: string, data: unknown) => {
+  try {
+    client.res.write(`event: ${eventName}\n`);
+    client.res.write(`data: ${JSON.stringify(data)}\n\n`);
+  } catch {
+    // Connection is likely closed; we'll clean up on 'close'.
+  }
+};
+
+const emitToRole = (roles: string[], eventName: string, data: unknown) => {
+  for (const [, client] of sseClientsByUserId) {
+    if (roles.includes(client.role)) writeSse(client, eventName, data);
+  }
+};
+
+const emitToUserIds = (userIds: string[], eventName: string, data: unknown) => {
+  for (const userId of userIds) {
+    const client = sseClientsByUserId.get(String(userId));
+    if (client) writeSse(client, eventName, data);
+  }
 };
 
 // ---------------- Upload Route (Updated to save data) ----------------
@@ -156,6 +196,32 @@ app.post(
     }
 });
 
+// Realtime stream for UI updates (SSE).
+app.get(
+  "/api/realtime",
+  authMiddleware,
+  authorize(["researcher", "policymaker", "admin"]),
+  (req: AuthenticatedRequest, res: Response) => {
+    const user = req.user!;
+
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache, no-transform");
+    res.setHeader("Connection", "keep-alive");
+    res.setHeader("X-Accel-Buffering", "no");
+
+    // Initial handshake
+    res.write(`event: connected\n`);
+    res.write(`data: ${JSON.stringify({ ok: true, role: user.role })}\n\n`);
+
+    const client: SseClient = { res, role: user.role, userId: user.id };
+    sseClientsByUserId.set(String(user.id), client);
+
+    req.on("close", () => {
+      sseClientsByUserId.delete(String(user.id));
+    });
+  }
+);
+
 // --- Route to get Analysis History ---
 app.get(
   "/api/analysis-history",
@@ -205,7 +271,7 @@ app.post(
       // This keeps referential integrity even when a policymaker creates an action/decision.
       const { data: sampleRow, error: sampleError } = await supabaseAdmin
         .from('water_samples')
-        .select('id, researcher_id')
+        .select('id, researcher_id, location_id')
         .eq('id', sample_id)
         .single();
 
@@ -217,21 +283,97 @@ app.post(
         return res.status(403).json({ error: "Forbidden: You can only create alerts for your own samples." });
       }
 
+      // Researcher-issued alert:
+      // Instead of "sending report" from the UI, we mark the existing editable report as Pending
+      // and notify policymakers in real-time.
+      if (req.user?.role === "researcher") {
+        const { data: siteSamples, error: siteSamplesError } = await supabaseAdmin
+          .from("water_samples")
+          .select("id")
+          .eq("location_id", sampleRow.location_id)
+          .eq("researcher_id", user.id)
+          .order("sample_date", { ascending: false })
+          .limit(20);
+
+        if (siteSamplesError) throw siteSamplesError;
+
+        const sampleIds = (siteSamples ?? []).map((s: any) => s.id);
+        const { data: existingReport, error: reportLookupError } = await supabaseAdmin
+          .from("alerts")
+          .select("id")
+          .ilike("title", `${REPORT_DRAFT_PREFIX}%`)
+          .eq("researcher_id", user.id)
+          .in("sample_id", sampleIds.length > 0 ? sampleIds : [sampleRow.id])
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (reportLookupError) throw reportLookupError;
+
+        if (existingReport) {
+          const { data: locationRow, error: locationError } = await supabaseAdmin
+            .from("locations")
+            .select("site")
+            .eq("id", sampleRow.location_id)
+            .single();
+
+          if (locationError) throw locationError;
+
+          const { data: updatedReport, error: updateReportError } = await supabaseAdmin
+            .from("alerts")
+            .update({
+              title: `${REPORT_FULL_PREFIX} ${locationRow?.site ?? ""}`.trim(),
+              govt_body,
+              is_urgent: !!is_urgent,
+              status: "Pending",
+            })
+            .eq("id", existingReport.id)
+            .select()
+            .single();
+
+          if (updateReportError) throw updateReportError;
+
+          emitToRole(["policymaker", "admin"], "report_sent", { siteId: sampleRow.location_id });
+          return res.status(201).json(updatedReport);
+        }
+
+        return res.status(400).json({
+          error: "Create a site report before issuing an alert to policymakers.",
+        });
+      }
+
       const { data, error } = await supabaseAdmin
         .from('alerts')
         .insert({
           sample_id,
           researcher_id: sampleRow.researcher_id,
           title,
-          message,
+          message:
+            typeof title === "string" && title.startsWith(POLICEMAKER_DECISION_PREFIX)
+              ? JSON.stringify({
+                  public_message: message ?? null,
+                  decision_status: status ?? null,
+                  action_taken: String(title)
+                    .replace(POLICEMAKER_DECISION_PREFIX, "")
+                    .split(" - ")[0]
+                    .trim(),
+                })
+              : message,
           govt_body,
           is_urgent,
-          status: status || 'Pending', // Default to 'Pending' if not provided
+          status: "Pending", // Always store a DB-safe enum value
         })
         .select()
         .single();
       
       if (error) throw error;
+
+      // Realtime notification: policymaker published a decision.
+      if (typeof title === "string" && title.startsWith(POLICEMAKER_DECISION_PREFIX)) {
+        const locationId = sampleRow.location_id;
+        emitToRole(["researcher", "policymaker", "admin"], "decision_published", { siteId: locationId });
+      }
+
       res.status(201).json(data);
     } catch (err: any) {
       console.error("🔥 Error creating alert:", err);
@@ -247,7 +389,9 @@ app.get(
   authorize(['researcher', 'policymaker', 'admin']),
   async (req: AuthenticatedRequest, res: Response) => {
     try {
-      const { data, error } = await supabaseAdmin
+      const user = req.user!;
+
+      let alertsQuery = supabaseAdmin
         .from('alerts')
         .select(`
           id,
@@ -257,6 +401,7 @@ app.get(
           is_urgent,
           status,
           created_at,
+          researcher_id,
           water_samples (
             sample_date,
             locations ( site ),
@@ -265,8 +410,23 @@ app.get(
         `)
         .order('created_at', { ascending: false });
 
+      if (user.role === "researcher") {
+        alertsQuery = alertsQuery.eq("researcher_id", user.id);
+      }
+
+      const { data, error } = await alertsQuery;
       if (error) throw error;
-      res.json(data);
+
+      let alerts = data ?? [];
+      if (user.role === "policymaker") {
+        // Avoid querying `status="Draft"` (your enum doesn't support it).
+        // Filter drafts by title prefix instead.
+        alerts = alerts.filter((a: any) =>
+          !String(a?.title ?? "").startsWith(REPORT_DRAFT_PREFIX)
+        );
+      }
+
+      res.json(alerts);
     } catch (err: any) {
       console.error("🔥 Error fetching alerts:", err);
       res.status(500).json({ error: "Failed to fetch alerts." });
@@ -342,6 +502,7 @@ app.get(
   async (req: AuthenticatedRequest, res: Response) => {
     try {
       const { siteId } = req.params;
+      const user = req.user!;
 
       // 1. Fetch the basic site information
       const { data: siteData, error: siteError } = await supabaseAdmin
@@ -353,8 +514,23 @@ app.get(
       if (siteError) throw siteError;
       if (!siteData) return res.status(404).json({ error: "Site not found." });
 
+      // Security: researchers should only see their own site's data.
+      if (user.role === "researcher") {
+        const { data: ownershipCheck, error: ownershipError } = await supabaseAdmin
+          .from("water_samples")
+          .select("id")
+          .eq("location_id", siteId)
+          .eq("researcher_id", user.id)
+          .limit(1);
+
+        if (ownershipError) throw ownershipError;
+        if (!ownershipCheck || ownershipCheck.length === 0) {
+          return res.status(403).json({ error: "Forbidden: You do not have access to this site." });
+        }
+      }
+
       // 2. Fetch all historical samples for this site, now including all metal concentrations
-      const { data: historicalData, error: historyError } = await supabaseAdmin
+      let historyQuery = supabaseAdmin
         .from('water_samples')
         .select(`
           id,
@@ -364,6 +540,12 @@ app.get(
         `)
         .eq('location_id', siteId)
         .order('sample_date', { ascending: true });
+
+      if (user.role === "researcher") {
+        historyQuery = historyQuery.eq('researcher_id', user.id);
+      }
+
+      const { data: historicalData, error: historyError } = await historyQuery;
 
       if (historyError) throw historyError;
 
@@ -379,6 +561,222 @@ app.get(
   }
 );
 
+// --- Researcher: Editable full report for this site ---
+// Stored in the existing `alerts` table under title prefix `Researcher Full Report:`.
+app.get(
+  "/api/sites/:siteId/reports/researcher",
+  authMiddleware,
+  authorize(["researcher", "admin"]),
+  async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const { siteId } = req.params;
+      const user = req.user!;
+
+      // Ownership check (prevents researchers from probing other sites).
+      const { data: ownershipCheck, error: ownershipError } = await supabaseAdmin
+        .from("water_samples")
+        .select("id")
+        .eq("location_id", siteId)
+        .eq("researcher_id", user.id)
+        .limit(1);
+
+      if (ownershipError) throw ownershipError;
+      if (!ownershipCheck || ownershipCheck.length === 0) {
+        return res.status(403).json({ error: "Forbidden: You do not have access to this site." });
+      }
+
+      // Avoid joined filters (`alerts -> water_samples(location_id)`) because they can fail
+      // depending on relationship naming. Instead, resolve sample_id(s) for this site.
+      const { data: siteSamples, error: siteSamplesError } = await supabaseAdmin
+        .from("water_samples")
+        .select("id")
+        .eq("location_id", siteId)
+        .eq("researcher_id", user.id)
+        .order("sample_date", { ascending: false })
+        .limit(20);
+
+      if (siteSamplesError) throw siteSamplesError;
+
+      const sampleIds = (siteSamples ?? []).map((s: any) => s.id);
+      if (sampleIds.length === 0) return res.json({ report: null });
+
+      // Prefer draft (editable) if it exists; otherwise fall back to full (sent/read-only).
+      const {
+        data: draftReport,
+        error: draftReportError,
+      } = await supabaseAdmin
+        .from("alerts")
+        .select("id, title, message, status, created_at")
+        .ilike("title", `${REPORT_DRAFT_PREFIX}%`)
+        .eq("researcher_id", user.id)
+        .in("sample_id", sampleIds)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (draftReportError) throw draftReportError;
+      if (draftReport) return res.json({ report: draftReport });
+
+      const {
+        data: fullReport,
+        error: fullReportError,
+      } = await supabaseAdmin
+        .from("alerts")
+        .select("id, title, message, status, created_at")
+        .ilike("title", `${REPORT_FULL_PREFIX}%`)
+        .eq("researcher_id", user.id)
+        .in("sample_id", sampleIds)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (fullReportError) throw fullReportError;
+      return res.json({ report: fullReport ?? null });
+    } catch (err: any) {
+      console.error("🔥 Error fetching researcher site report:", err);
+      return res.status(500).json({ error: "Failed to fetch researcher report." });
+    }
+  }
+);
+
+app.post(
+  "/api/sites/:siteId/reports/researcher",
+  authMiddleware,
+  authorize(["researcher", "admin"]),
+  async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const { siteId } = req.params;
+      const user = req.user!;
+      const { report_text, site_description, recommendation, trend_summary } = req.body ?? {};
+
+      if (!report_text && !site_description && !recommendation) {
+        return res.status(400).json({ error: "Missing report fields." });
+      }
+
+      const { data: siteData, error: siteError } = await supabaseAdmin
+        .from("locations")
+        .select("id, site")
+        .eq("id", siteId)
+        .single();
+      if (siteError) throw siteError;
+      if (!siteData) return res.status(404).json({ error: "Site not found." });
+
+      // Ensure this researcher has samples for this site and get the latest sample id.
+      const { data: latestSample, error: latestSampleError } = await supabaseAdmin
+        .from("water_samples")
+        .select("id")
+        .eq("location_id", siteId)
+        .eq("researcher_id", user.id)
+        .order("sample_date", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (latestSampleError) throw latestSampleError;
+      if (!latestSample) return res.status(404).json({ error: "No samples found for this site." });
+
+      const reportPayload = {
+        report_text: report_text ?? "",
+        site_description: site_description ?? "",
+        recommendation: recommendation ?? "",
+        trend_summary: trend_summary ?? "",
+        updated_by: user.id,
+      };
+
+      // Resolve sample_id(s) for this site to avoid joined filters.
+      const { data: siteSamples, error: siteSamplesError } = await supabaseAdmin
+        .from("water_samples")
+        .select("id")
+        .eq("location_id", siteId)
+        .eq("researcher_id", user.id)
+        .order("sample_date", { ascending: false })
+        .limit(20);
+
+      if (siteSamplesError) throw siteSamplesError;
+
+      const sampleIds = (siteSamples ?? []).map((s: any) => s.id);
+      if (sampleIds.length === 0) return res.status(404).json({ error: "No samples found for this site." });
+
+      // Editable draft is identified by title prefix, not by `alerts.status` (enum-limited).
+      const {
+        data: existingDraft,
+        error: existingDraftError,
+      } = await supabaseAdmin
+        .from("alerts")
+        .select("id")
+        .ilike("title", `${REPORT_DRAFT_PREFIX}%`)
+        .eq("researcher_id", user.id)
+        .in("sample_id", sampleIds)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (existingDraftError) throw existingDraftError;
+
+      const {
+        data: existingFull,
+        error: existingFullError,
+      } = await supabaseAdmin
+        .from("alerts")
+        .select("id")
+        .ilike("title", `${REPORT_FULL_PREFIX}%`)
+        .eq("researcher_id", user.id)
+        .in("sample_id", sampleIds)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (existingFullError) throw existingFullError;
+
+      // If full report exists and draft doesn't, the report is read-only.
+      if (!existingDraft && existingFull) {
+        return res
+          .status(409)
+          .json({ error: "This report has already been sent and is read-only." });
+      }
+
+      const draftTitle = `${REPORT_DRAFT_PREFIX} ${siteData.site}`;
+
+      if (existingDraft) {
+        const { data: updated, error: updatedError } = await supabaseAdmin
+          .from("alerts")
+          .update({
+            title: draftTitle,
+            message: JSON.stringify(reportPayload),
+            status: "Pending",
+          })
+          .eq("id", existingDraft.id)
+          .select()
+          .single();
+
+        if (updatedError) throw updatedError;
+        emitToRole(["policymaker", "admin"], "report_draft_updated", { siteId });
+        return res.status(200).json(updated);
+      }
+
+      const { data: created, error: createdError } = await supabaseAdmin
+        .from("alerts")
+        .insert({
+          sample_id: latestSample.id,
+          researcher_id: user.id,
+          title: draftTitle,
+          message: JSON.stringify(reportPayload),
+          govt_body: "State Pollution Control Board",
+          is_urgent: false,
+          status: "Pending",
+        })
+        .select()
+        .single();
+
+      if (createdError) throw createdError;
+      emitToRole(["policymaker", "admin"], "report_draft_updated", { siteId });
+      return res.status(201).json(created);
+    } catch (err: any) {
+      console.error("🔥 Error saving researcher site report:", err);
+      return res.status(500).json({ error: "Failed to save report." });
+    }
+  }
+);
+
 // --- Latest Researcher Full Report for a Site (policymaker can download) ---
 app.get(
   "/api/sites/:siteId/reports/latest-researcher",
@@ -388,13 +786,23 @@ app.get(
     try {
       const { siteId } = req.params;
 
+      const { data: siteSamples, error: siteSamplesError } = await supabaseAdmin
+        .from("water_samples")
+        .select("id")
+        .eq("location_id", siteId)
+        .order("sample_date", { ascending: false })
+        .limit(50);
+
+      if (siteSamplesError) throw siteSamplesError;
+
+      const sampleIds = (siteSamples ?? []).map((s: any) => s.id);
+      if (sampleIds.length === 0) return res.json({ report: null });
+
       const { data: latestReport, error: reportError } = await supabaseAdmin
         .from("alerts")
-        .select(
-          "id, title, message, govt_body, is_urgent, status, created_at, water_samples(location_id)"
-        )
-        .ilike("title", "Researcher Full Report%")
-        .eq("water_samples.location_id", siteId)
+        .select("id, title, message, govt_body, is_urgent, status, created_at")
+        .ilike("title", `${REPORT_FULL_PREFIX}%`)
+        .in("sample_id", sampleIds)
         .order("created_at", { ascending: false })
         .limit(1)
         .maybeSingle();
@@ -405,6 +813,79 @@ app.get(
     } catch (err: any) {
       console.error("🔥 Error fetching latest researcher report:", err);
       return res.status(500).json({ error: "Failed to fetch latest report." });
+    }
+  }
+);
+
+// --- Latest policymaker decision for a site ---
+app.get(
+  "/api/sites/:siteId/decisions/latest",
+  authMiddleware,
+  authorize(["researcher", "policymaker", "admin"]),
+  async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const { siteId } = req.params;
+      const user = req.user!;
+
+      // If researcher, ensure ownership of the site.
+      if (user.role === "researcher") {
+        const { data: ownershipCheck, error: ownershipError } = await supabaseAdmin
+          .from("water_samples")
+          .select("id")
+          .eq("location_id", siteId)
+          .eq("researcher_id", user.id)
+          .limit(1);
+        if (ownershipError) throw ownershipError;
+        if (!ownershipCheck || ownershipCheck.length === 0) {
+          return res.status(403).json({ error: "Forbidden: You do not have access to this site." });
+        }
+      }
+
+      const { data: siteSamples, error: siteSamplesError } = await supabaseAdmin
+        .from("water_samples")
+        .select("id")
+        .eq("location_id", siteId)
+        .order("sample_date", { ascending: false })
+        .limit(50);
+
+      if (siteSamplesError) throw siteSamplesError;
+
+      const sampleIds = (siteSamples ?? []).map((s: any) => s.id);
+      if (sampleIds.length === 0) return res.json({ decision: null });
+
+      let decisionsQuery = supabaseAdmin
+        .from("alerts")
+        .select("id, title, message, govt_body, is_urgent, status, created_at")
+        .ilike("title", "Policymaker Decision:%")
+        .in("sample_id", sampleIds)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (user.role === "researcher") {
+        decisionsQuery = decisionsQuery.eq("researcher_id", user.id);
+      }
+
+      const { data: decision, error: decisionError } = await decisionsQuery;
+      if (decisionError) throw decisionError;
+      if (!decision) return res.json({ decision: null });
+
+      // For policymaker decisions we store `message` as JSON
+      // { public_message, decision_status, action_taken } to keep DB enum-safe.
+      if (typeof decision.message === "string") {
+        try {
+          const parsed = JSON.parse(decision.message);
+          (decision as any).message = parsed?.public_message ?? decision.message;
+          (decision as any).status = parsed?.decision_status ?? decision.status;
+        } catch {
+          // Backward compatibility: older records might store plain text.
+        }
+      }
+
+      return res.json({ decision });
+    } catch (err: any) {
+      console.error("🔥 Error fetching latest decision:", err);
+      return res.status(500).json({ error: "Failed to fetch site decision." });
     }
   }
 );
@@ -818,8 +1299,28 @@ app.get("/api/map-data", async (req: Request, res: Response) => {
 
       latestDecisionByLocation.set(locId, {
         title: (a as any).title,
-        message: (a as any).message ?? null,
-        status: (a as any).status ?? null,
+        message: (() => {
+          const raw = (a as any).message;
+          if (typeof raw !== "string") return raw ?? null;
+          try {
+            const parsed = JSON.parse(raw);
+            return parsed?.public_message ?? raw ?? null;
+          } catch {
+            return raw ?? null;
+          }
+        })(),
+        status: (() => {
+          const raw = (a as any).message;
+          if (typeof raw === "string") {
+            try {
+              const parsed = JSON.parse(raw);
+              return parsed?.decision_status ?? (a as any).status ?? null;
+            } catch {
+              return (a as any).status ?? null;
+            }
+          }
+          return (a as any).status ?? null;
+        })(),
         govt_body: (a as any).govt_body ?? null,
         is_urgent: (a as any).is_urgent ?? null,
         created_at: (a as any).created_at ?? null,
@@ -898,6 +1399,7 @@ app.get(
           created_at,
           water_samples ( locations ( site ) )
         `)
+        .eq('status', 'Pending')
         .order('created_at', { ascending: false })
         .limit(5);
       

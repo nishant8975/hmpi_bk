@@ -173,7 +173,6 @@ const AnalysisHistory = () => {
                         <DropdownMenuItem onClick={() => navigate(`/site/${analysis.location_id}`)}>
                           View Site Details
                         </DropdownMenuItem>
-                        <DropdownMenuItem disabled>Generate Report</DropdownMenuItem>
                         <DropdownMenuSeparator />
                         <DropdownMenuItem
                           onClick={() => handleIssueAlert(analysis)}

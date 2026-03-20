@@ -8,7 +8,6 @@ import { createAlert, getAlerts } from "../service/api";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -36,7 +35,7 @@ const AlertsPage = () => {
 
     // Form state, pre-filled from navigation if available
     const [title, setTitle] = useState(location.state?.title || "");
-    const [message, setMessage] = useState("");
+    const message = "";
     const [govtBody, setGovtBody] = useState("State Pollution Control Board");
     const [isUrgent, setIsUrgent] = useState(location.state?.isUrgent || false);
     const [status, setStatus] = useState("Pending");
@@ -103,8 +102,10 @@ const AlertsPage = () => {
                                 </div>
                             </div>
                             <div className="space-y-2">
-                                <Label htmlFor="message">Message to Policymakers (Optional)</Label>
-                                <Textarea id="message" value={message} onChange={(e) => setMessage(e.target.value)} placeholder="Provide a summary of the findings and any recommended actions..." />
+                                <Label>Message to policymakers</Label>
+                                <p className="text-xs text-muted-foreground">
+                                  This will be filled from your saved site report automatically.
+                                </p>
                             </div>
                             <div className="flex items-center space-x-2">
                                 <Switch id="isUrgent" checked={isUrgent} onCheckedChange={setIsUrgent} />

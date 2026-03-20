@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
 import { getMapData } from '@/service/api';
 import { Loader2 } from 'lucide-react';
@@ -6,6 +6,7 @@ import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
+import { useRealtimeEvents } from '@/hooks/useRealtimeEvents';
 
 // Fix for default marker icon issue with webpack
 delete (L.Icon.Default.prototype as any)._getIconUrl;
@@ -39,6 +40,7 @@ const createIcon = (color: string) => {
 const MapView = () => {
     const navigate = useNavigate();
     const { profile } = useAuth();
+    const queryClient = useQueryClient();
     const canOpenSiteDetails =
       profile?.role === 'policymaker' ||
       profile?.role === 'admin' ||
@@ -51,6 +53,12 @@ const MapView = () => {
         queryKey: ['mapData'],
         queryFn: getMapData,
         staleTime: 0, // always refetch so we don't keep old mock data
+    });
+
+    useRealtimeEvents({
+      decision_published: () => {
+        queryClient.invalidateQueries({ queryKey: ["mapData"] });
+      },
     });
 
     const center = mapData?.length

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -6,6 +6,9 @@ import {
   downloadSiteReport,
   getLatestResearcherSiteReport,
   getSiteDetails,
+  getResearcherSiteReport,
+  saveResearcherSiteReport,
+  getLatestSiteDecision,
 } from "../service/api";
 import {
   Card,
@@ -50,6 +53,7 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { useAuth } from "../hooks/useAuth"; 
+import { useRealtimeEvents } from "@/hooks/useRealtimeEvents";
 import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
 
@@ -116,7 +120,6 @@ const HandwrittenPad = ({
     ctx.fillRect(0, 0, w, h);
     onSave(null);
     lastPointRef.current = null;
-    setStroke(true);
   };
 
   const save = () => {
@@ -206,13 +209,32 @@ const SiteDetailsPage = () => {
   const isResearcher = profile?.role === "researcher" || profile?.role === "admin";
   const isPolicymaker = profile?.role === "policymaker" || profile?.role === "admin";
 
+  useRealtimeEvents({
+    report_sent: (data: any) => {
+      if (!siteId || String(data?.siteId) !== String(siteId)) return;
+      if (isPolicymaker) {
+        queryClient.invalidateQueries({
+          queryKey: ["latestResearcherSiteReport", siteId],
+        });
+      }
+    },
+    decision_published: (data: any) => {
+      if (!siteId || String(data?.siteId) !== String(siteId)) return;
+      queryClient.invalidateQueries({ queryKey: ["mapData"] });
+      queryClient.invalidateQueries({
+        queryKey: ["latestResearcherSiteReport", siteId],
+      });
+      queryClient.invalidateQueries({ queryKey: ["researcherSiteReport", siteId] });
+      queryClient.invalidateQueries({ queryKey: ["latestSiteDecision", siteId] });
+    },
+  });
+
   // Policymaker decision form state
   const [decisionAction, setDecisionAction] = useState<string>("Isolate site");
   const [decisionMessage, setDecisionMessage] = useState<string>("");
   const [decisionGovtBody, setDecisionGovtBody] = useState<string>("State Pollution Control Board");
   const [decisionStatus, setDecisionStatus] = useState<string>("Action Taken");
   const [decisionUrgent, setDecisionUrgent] = useState<boolean>(false);
-  const [handwrittenNoteDataUrl, setHandwrittenNoteDataUrl] = useState<string | null>(null);
 
   const decisionMutation = useMutation({
     mutationFn: createAlert,
@@ -225,19 +247,82 @@ const SiteDetailsPage = () => {
     },
   });
 
-  // Researcher full report (to policymaker)
-  const [fullReportText, setFullReportText] = useState<string>("");
-  const fullReportMutation = useMutation({
-    mutationFn: createAlert,
+  // Researcher editable report (read-only after it is sent)
+  const [reportText, setReportText] = useState<string>("");
+  const [siteDescriptionText, setSiteDescriptionText] = useState<string>("");
+  const [recommendationText, setRecommendationText] = useState<string>("");
+
+  const {
+    data: researcherReportResponse,
+    isLoading: isResearcherReportLoading,
+  } = useQuery({
+    queryKey: ["researcherSiteReport", siteId],
+    queryFn: () => getResearcherSiteReport(siteId!),
+    enabled: isResearcher && !!siteId,
+    staleTime: 0,
+  });
+
+  const researcherReport = researcherReportResponse?.report ?? null;
+
+  const isReportLocked =
+    !!researcherReport?.title &&
+    String(researcherReport.title).startsWith("Researcher Full Report:");
+
+  const researcherReportStateLabel = (() => {
+    const title = researcherReport?.title ? String(researcherReport.title) : "";
+    if (!title) return null;
+    if (title.startsWith("Researcher Draft Report:")) return "Draft";
+    if (title.startsWith("Researcher Full Report:")) return "Sent";
+    return null;
+  })();
+
+  useEffect(() => {
+    if (!researcherReport?.message) return;
+    try {
+      const parsed = JSON.parse(String(researcherReport.message));
+      setReportText(parsed?.report_text ?? "");
+      setSiteDescriptionText(parsed?.site_description ?? "");
+      setRecommendationText(parsed?.recommendation ?? "");
+    } catch {
+      // If older reports are plain text, keep the editor empty.
+    }
+  }, [researcherReport?.id]);
+
+  const saveResearcherReportMutation = useMutation({
+    mutationFn: (payload: {
+      report_text: string;
+      site_description: string;
+      recommendation: string;
+      trend_summary?: string;
+    }) => saveResearcherSiteReport(siteId!, payload),
     onSuccess: async () => {
-      toast({ title: "Report sent", description: "Policymakers can download this full report." });
-      // Refetch latest report for policymaker view.
-      queryClient.invalidateQueries({ queryKey: ["latestResearcherSiteReport", siteId] });
+      toast({ title: "Report saved", description: "Your report is ready to be sent via alert." });
+      queryClient.invalidateQueries({ queryKey: ["researcherSiteReport", siteId] });
     },
     onError: (err: any) => {
-      toast({ variant: "destructive", title: "Failed to send report", description: err?.message || "Unknown error" });
+      toast({ variant: "destructive", title: "Failed to save report", description: err?.message || "Unknown error" });
     },
   });
+
+  const {
+    data: latestDecisionResponse,
+    isLoading: isLatestDecisionLoading,
+  } = useQuery({
+    queryKey: ["latestSiteDecision", siteId],
+    queryFn: () => getLatestSiteDecision(siteId!),
+    enabled: isResearcher && !!siteId,
+    staleTime: 0,
+  });
+
+  const latestSiteDecision = latestDecisionResponse?.decision ?? null;
+
+  const latestDecisionAction = useMemo(() => {
+    const title = latestSiteDecision?.title;
+    if (!title) return "";
+    const prefix = "Policymaker Decision:";
+    const withoutPrefix = title.startsWith(prefix) ? title.slice(prefix.length) : title;
+    return String(withoutPrefix).split(" - ")[0]?.trim() ?? "";
+  }, [latestSiteDecision?.title]);
 
   const {
     data: latestResearcherReportResponse,
@@ -250,6 +335,21 @@ const SiteDetailsPage = () => {
   });
 
   const latestResearcherReport = latestResearcherReportResponse?.report ?? null;
+
+  const latestResearcherReportParsed = useMemo(() => {
+    if (!latestResearcherReport?.message) return null;
+    try {
+      return JSON.parse(String(latestResearcherReport.message));
+    } catch {
+      // Backward compatibility: older records may store plain text.
+      return {
+        report_text: String(latestResearcherReport.message ?? ""),
+        site_description: "",
+        recommendation: "",
+        trend_summary: "",
+      };
+    }
+  }, [latestResearcherReport?.id, latestResearcherReport?.message]);
 
   const {
     data: site,
@@ -397,6 +497,29 @@ const SiteDetailsPage = () => {
     const riskLevel = latestSample?.pollution_indices[0]?.risk_level;
     const isHighRisk = riskLevel === 'high' || riskLevel === 'critical';
 
+    if (isResearcher) {
+      if (!researcherReport) {
+        toast({
+          variant: "destructive",
+          title: "Report required",
+          description: "Create a site report before issuing an alert to policymakers.",
+        });
+        return;
+      }
+      if (
+        !String(researcherReport.title ?? "").startsWith(
+          "Researcher Draft Report:"
+        )
+      ) {
+        toast({
+          variant: "destructive",
+          title: "Report already sent",
+          description: "This report is already sent and cannot be re-sent from Draft state.",
+        });
+        return;
+      }
+    }
+
     navigate('/alerts', {
       state: {
         sampleId: latestSample.id,
@@ -442,6 +565,21 @@ const SiteDetailsPage = () => {
       {}
     ),
   }));
+
+  const hmpiValues = site.history
+    .map((s: any) => Number(s.pollution_indices?.[0]?.hmpi))
+    .filter((v: number) => Number.isFinite(v));
+
+  const hmpiTrendSummary = (() => {
+    if (hmpiValues.length === 0) return "";
+    const latest = hmpiValues[hmpiValues.length - 1];
+    const min = Math.min(...hmpiValues);
+    const max = Math.max(...hmpiValues);
+    const delta = latest - hmpiValues[0];
+    const direction = hmpiValues.length >= 2 ? (delta > 0 ? "increasing" : delta < 0 ? "decreasing" : "stable") : "stable";
+    const risk = latestSample?.pollution_indices?.[0]?.risk_level ?? "N/A";
+    return `Latest HMPI: ${latest.toFixed(2)}\nRisk level: ${risk}\nRange: ${min.toFixed(2)} - ${max.toFixed(2)}\nOverall trend: ${direction}`;
+  })();
 
   return (
     <div className="space-y-8" ref={reportCaptureRef}>
@@ -583,7 +721,12 @@ const SiteDetailsPage = () => {
             </CardContent>
             {isResearcher && latestSample && (
               <CardFooter>
-                <Button onClick={handleIssueAlert} className="w-full" variant="outline">
+                <Button
+                  onClick={handleIssueAlert}
+                  className="w-full"
+                  variant="outline"
+                  disabled={isResearcherReportLoading}
+                >
                   <BellPlus className="mr-2 h-4 w-4" />
                   Issue Alert for this Site
                 </Button>
@@ -594,46 +737,115 @@ const SiteDetailsPage = () => {
           {isResearcher && latestSample && (
             <Card>
               <CardHeader className="pb-2">
-                <CardTitle className="text-base font-semibold">
-                  Send Full Research Report
-                </CardTitle>
+                <CardTitle className="text-base font-semibold">Create Site Report</CardTitle>
                 <CardDescription>
-                  Add conclusions using HMPI + metal concentrations. Policymakers can download it.
+                  HMPI trends are included automatically. Add your conclusions, site description, and recommendations,
+                  then click create a report. The report is sent to policymakers when you issue an alert.
                 </CardDescription>
               </CardHeader>
-              <CardContent className="space-y-3">
+              <CardContent className="space-y-4">
+                <div className="rounded-md border p-3 bg-muted/30">
+                  <p className="text-sm font-medium mb-2">HMPI trend summary (auto)</p>
+                  <p className="text-sm whitespace-pre-wrap leading-5">
+                    {hmpiTrendSummary || "No HMPI data available for summary."}
+                  </p>
+                </div>
+
                 <div className="space-y-2">
-                  <Label>Report to policymakers</Label>
+                  <Label>Report conclusions</Label>
                   <Textarea
-                    value={fullReportText}
-                    onChange={(e) => setFullReportText(e.target.value)}
-                    placeholder="Write the full report for this site. Include key findings and recommendations..."
-                    className="min-h-[140px]"
+                    value={reportText}
+                    onChange={(e) => setReportText(e.target.value)}
+                    placeholder="Key findings based on HMPI and metal concentrations..."
+                    className="min-h-[120px]"
+                    disabled={isReportLocked || saveResearcherReportMutation.isPending}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Site description</Label>
+                  <Textarea
+                    value={siteDescriptionText}
+                    onChange={(e) => setSiteDescriptionText(e.target.value)}
+                    placeholder="Describe the site context and observed conditions..."
+                    className="min-h-[90px]"
+                    disabled={isReportLocked || saveResearcherReportMutation.isPending}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Recommendation for action</Label>
+                  <Textarea
+                    value={recommendationText}
+                    onChange={(e) => setRecommendationText(e.target.value)}
+                    placeholder="What should policymakers do next (monitoring, remediation, isolation, timelines)..."
+                    className="min-h-[90px]"
+                    disabled={isReportLocked || saveResearcherReportMutation.isPending}
                   />
                 </div>
 
                 <Button
                   className="w-full"
                   onClick={() => {
-                    if (!latestSample) return;
-                    if (!fullReportText.trim()) {
-                      toast({ variant: "destructive", title: "Missing report text", description: "Please write the report before sending." });
-                      return;
-                    }
-
-                    fullReportMutation.mutate({
-                      sample_id: latestSample.id,
-                      title: `Researcher Full Report: ${site.site}`,
-                      message: fullReportText,
-                      govt_body: decisionGovtBody,
-                      is_urgent: decisionUrgent,
-                      status: "Report Submitted",
+                    if (isReportLocked) return;
+                    saveResearcherReportMutation.mutate({
+                      report_text: reportText,
+                      site_description: siteDescriptionText,
+                      recommendation: recommendationText,
+                      trend_summary: hmpiTrendSummary,
                     });
                   }}
-                  disabled={fullReportMutation.isPending}
+                  disabled={isReportLocked || saveResearcherReportMutation.isPending}
                 >
-                  {fullReportMutation.isPending ? "Sending..." : "Send to Policymaker"}
+                  {saveResearcherReportMutation.isPending
+                    ? "Saving..."
+                    : isReportLocked
+                      ? "Report sent (read-only)"
+                      : researcherReport
+                        ? "Update report"
+                        : "Create a report"}
                 </Button>
+
+                <div className="text-xs text-muted-foreground">
+                  {researcherReportStateLabel
+                    ? `Current report status: ${researcherReportStateLabel}`
+                    : isResearcherReportLoading
+                      ? "Loading report..."
+                      : "Report not created yet."}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {isResearcher && latestSiteDecision && (
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base font-semibold">Published Policymaker Action</CardTitle>
+                <CardDescription>
+                  Latest decision published to the public map for this site.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="text-sm text-muted-foreground">
+                  Government body: {latestSiteDecision.govt_body || "N/A"}
+                  {latestSiteDecision.is_urgent ? " • Urgent" : ""}
+                </div>
+
+                <div className="rounded-md border p-3 bg-muted/30">
+                  <p className="text-sm font-medium mb-2">Action & status</p>
+                  <p className="text-sm">
+                    Action: {latestDecisionAction || "N/A"}
+                    <br />
+                    Status: {latestSiteDecision.status || "N/A"}
+                  </p>
+                </div>
+
+                <div className="rounded-md border p-3">
+                  <p className="text-sm font-medium mb-2">Public message</p>
+                  <p className="text-sm whitespace-pre-wrap leading-5">
+                    {latestSiteDecision.message || "No public message provided."}
+                  </p>
+                </div>
               </CardContent>
             </Card>
           )}
@@ -718,25 +930,6 @@ const SiteDetailsPage = () => {
                   <Label htmlFor="decisionUrgent">Mark as urgent</Label>
                 </div>
 
-                <div className="space-y-2 pt-3">
-                  <Label>Handwritten report (policymaker, for PDF)</Label>
-                  <HandwrittenPad
-                    disabled={decisionMutation.isPending}
-                    onSave={(dataUrl) => setHandwrittenNoteDataUrl(dataUrl)}
-                  />
-                  {handwrittenNoteDataUrl ? (
-                    <img
-                      src={handwrittenNoteDataUrl}
-                      alt="Handwritten note preview"
-                      className="w-full rounded-md border bg-white"
-                    />
-                  ) : (
-                    <p className="text-xs text-muted-foreground">
-                      Optional: draw and press Save.
-                    </p>
-                  )}
-                </div>
-
                 <Button
                   className="w-full"
                   onClick={() => {
@@ -819,7 +1012,7 @@ const SiteDetailsPage = () => {
               <CardHeader className="pb-2">
                 <CardTitle className="text-base font-semibold">Researcher Full Report</CardTitle>
                 <CardDescription>
-                  Latest submitted report text for policymakers (PDF includes charts + table + this note).
+                  Latest researcher report sent with an alert (PDF includes charts + HMPI trends + this report).
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-3">
@@ -835,11 +1028,30 @@ const SiteDetailsPage = () => {
                       • Status: {latestResearcherReport.status || "N/A"}
                     </div>
 
-                    <div className="rounded-md border p-3 bg-muted/30">
-                      <p className="text-sm font-medium mb-2">Report text</p>
-                      <p className="text-sm whitespace-pre-wrap leading-5">
-                        {latestResearcherReport.message || "No report text provided."}
-                      </p>
+                    <div className="space-y-3">
+                      <div className="rounded-md border p-3 bg-muted/30">
+                        <p className="text-sm font-medium mb-2">Conclusions</p>
+                        <p className="text-sm whitespace-pre-wrap leading-5">
+                          {latestResearcherReportParsed?.report_text ||
+                            "No conclusions provided."}
+                        </p>
+                      </div>
+
+                      <div className="rounded-md border p-3">
+                        <p className="text-sm font-medium mb-2">Site description</p>
+                        <p className="text-sm whitespace-pre-wrap leading-5">
+                          {latestResearcherReportParsed?.site_description ||
+                            "No site description provided."}
+                        </p>
+                      </div>
+
+                      <div className="rounded-md border p-3">
+                        <p className="text-sm font-medium mb-2">Recommendation for action</p>
+                        <p className="text-sm whitespace-pre-wrap leading-5">
+                          {latestResearcherReportParsed?.recommendation ||
+                            "No recommendation provided."}
+                        </p>
+                      </div>
                     </div>
 
                     <Button
