@@ -1,6 +1,10 @@
 import { supabase } from '@/config/supabaseClient';
 
-const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:5000";
+// While developing (`npm run dev`), force the frontend to use the locally running backend.
+// This avoids accidentally calling an older deployed API (that may still return mock map data).
+const API_BASE = import.meta.env.DEV
+  ? "http://localhost:5000"
+  : import.meta.env.VITE_API_BASE || "http://localhost:5000";
 // Helper function to get the auth header
 const getAuthHeader = async () => {
   const { data: { session }, error } = await supabase.auth.getSession();
@@ -207,6 +211,80 @@ export const getPolicymakerDashboardData = async () => {
     throw new Error(errorData.error || 'Failed to fetch policymaker dashboard data.');
   }
   return response.json();
+};
+
+// --- ✨ Policymaker Dynamic Reports (no mock) ---
+export const getPolicymakerReportSummary = async () => {
+  const authHeader = await getAuthHeader();
+  const response = await fetch(`${API_BASE}/api/reports/policymaker/summary`, {
+    headers: { ...authHeader },
+  });
+  if (!response.ok) {
+    const errorData = await response.json();
+    throw new Error(errorData.error || 'Failed to fetch report summary.');
+  }
+  return response.json();
+};
+
+export const getPolicymakerReportTrend = async () => {
+  const authHeader = await getAuthHeader();
+  const response = await fetch(`${API_BASE}/api/reports/policymaker/trend`, {
+    headers: { ...authHeader },
+  });
+  if (!response.ok) {
+    const errorData = await response.json();
+    throw new Error(errorData.error || 'Failed to fetch report trend.');
+  }
+  return response.json();
+};
+
+export const getPolicymakerReportRegions = async () => {
+  const authHeader = await getAuthHeader();
+  const response = await fetch(`${API_BASE}/api/reports/policymaker/regions`, {
+    headers: { ...authHeader },
+  });
+  if (!response.ok) {
+    const errorData = await response.json();
+    throw new Error(errorData.error || 'Failed to fetch report regions.');
+  }
+  return response.json();
+};
+
+// --- Latest researcher full report for a site ---
+export const getLatestResearcherSiteReport = async (siteId: string) => {
+  const authHeader = await getAuthHeader();
+  const response = await fetch(`${API_BASE}/api/sites/${siteId}/reports/latest-researcher`, {
+    headers: { ...authHeader },
+  });
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => null);
+    throw new Error(errorData?.error || "Failed to fetch latest site report.");
+  }
+  return response.json();
+};
+
+// --- Per-site report download ---
+export const downloadSiteReport = async (siteId: string, format: "csv" | "excel") => {
+  const authHeader = await getAuthHeader();
+  const response = await fetch(
+    `${API_BASE}/api/sites/${siteId}/report?format=${format}`,
+    { headers: { ...authHeader } }
+  );
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => null);
+    throw new Error(errorData?.error || 'Failed to download site report.');
+  }
+
+  const blob = await response.blob();
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `site_${siteId}_report.${format === "excel" ? "xlsx" : "csv"}`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  window.URL.revokeObjectURL(url);
 };
 
 

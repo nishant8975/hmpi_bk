@@ -4,6 +4,8 @@ import { getMapData } from '@/service/api';
 import { Loader2 } from 'lucide-react';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
+import { useNavigate } from 'react-router-dom';
+import { useAuth } from '@/hooks/useAuth';
 
 // Fix for default marker icon issue with webpack
 delete (L.Icon.Default.prototype as any)._getIconUrl;
@@ -35,10 +37,28 @@ const createIcon = (color: string) => {
 };
 
 const MapView = () => {
+    const navigate = useNavigate();
+    const { profile } = useAuth();
+    const canOpenSiteDetails =
+      profile?.role === 'policymaker' ||
+      profile?.role === 'admin' ||
+      profile?.role === 'researcher';
+
+    const openLabel =
+      profile?.role === 'researcher' ? 'Analyze site' : 'Open site details';
+
     const { data: mapData, isLoading, error } = useQuery({
         queryKey: ['mapData'],
         queryFn: getMapData,
+        staleTime: 0, // always refetch so we don't keep old mock data
     });
+
+    const center = mapData?.length
+        ? ([
+            mapData.reduce((sum: number, p: any) => sum + Number(p.latitude), 0) / mapData.length,
+            mapData.reduce((sum: number, p: any) => sum + Number(p.longitude), 0) / mapData.length,
+          ] as [number, number])
+        : ([18.5204, 73.8567] as [number, number]);
 
     if (isLoading) {
         return <div className="flex justify-center items-center h-[calc(100vh-200px)]"><Loader2 className="h-10 w-10 animate-spin" /></div>;
@@ -54,7 +74,25 @@ const MapView = () => {
                 <h1 className="text-3xl font-bold">Contamination Map</h1>
                 <p className="text-muted-foreground">An overview of water quality at monitored sites.</p>
             </div>
-            <MapContainer center={[18.5204, 73.8567]} zoom={11} scrollWheelZoom={false} style={{ height: '600px', width: '100%', borderRadius: '10px' }}>
+             <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+                <span className="flex items-center gap-2">
+                  <span className="w-3 h-3 rounded-full" style={{ background: "red" }} />
+                  Critical
+                </span>
+                <span className="flex items-center gap-2">
+                  <span className="w-3 h-3 rounded-full" style={{ background: "orange" }} />
+                  High
+                </span>
+                <span className="flex items-center gap-2">
+                  <span className="w-3 h-3 rounded-full" style={{ background: "yellow" }} />
+                  Moderate
+                </span>
+                <span className="flex items-center gap-2">
+                  <span className="w-3 h-3 rounded-full" style={{ background: "green" }} />
+                  Safe
+                </span>
+             </div>
+            <MapContainer center={center} zoom={11} scrollWheelZoom={false} style={{ height: '600px', width: '100%', borderRadius: '10px' }}>
                 <TileLayer
                     attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
                     url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
@@ -63,7 +101,44 @@ const MapView = () => {
                     <Marker key={point.id} position={[point.latitude, point.longitude]} icon={createIcon(getMarkerColor(point.risk_level))}>
                         <Popup>
                            <strong>{point.site}</strong><br/>
-                           Risk Level: {point.risk_level}
+                           Risk Level: {point.risk_level}<br/>
+                           HMPI: {Number.isFinite(Number(point.hmpi)) ? Number(point.hmpi).toFixed(2) : "N/A"}
+                           {point.decision ? (
+                              <>
+                                <br/>
+                                <strong>Policymaker Action:</strong> {point.decision.title || "Decision"}<br/>
+                                {point.decision.status ? <>Status: {point.decision.status}<br/></> : null}
+                                {point.decision.message ? (
+                                  <>
+                                    Message: {String(point.decision.message).length > 140
+                                      ? `${String(point.decision.message).slice(0, 140)}...`
+                                      : point.decision.message}
+                                  </>
+                                ) : (
+                                  <>Message: N/A</>
+                                )}
+                              </>
+                           ) : (
+                             <>
+                               <br/>
+                               Policymaker Action: Not yet published
+                             </>
+                           )}
+
+                           {canOpenSiteDetails ? (
+                             <>
+                               <br/>
+                               <button
+                                 className="text-xs underline hover:opacity-80"
+                                 onClick={(e) => {
+                                   e.preventDefault();
+                                   navigate(`/site/${point.id}`);
+                                 }}
+                               >
+                                 {openLabel}
+                               </button>
+                             </>
+                           ) : null}
                         </Popup>
                     </Marker>
                 ))}

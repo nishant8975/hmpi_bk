@@ -12,6 +12,7 @@ import { getResearcherDashboardData } from "@/service/api";
 import PolicymakerDashboard from '@/pages/PolicymakerDashboard';
 import PublicDashboard from '@/pages/PublicDashboard';
 import AdminDashboard from '@/pages/AdminDashboard';
+import MapView from '@/pages/map view/MapView';
 
 const getRiskBadgeVariant = (risk?: string): "default" | "secondary" | "destructive" | "outline" => {
   switch (risk?.toLowerCase()) {
@@ -87,6 +88,15 @@ const ResearcherDashboard = () => {
               )) : ( <TableRow><TableCell colSpan={4} className="h-24 text-center">No recent analyses found.</TableCell></TableRow> )}
             </TableBody>
           </Table>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Contamination Map (Your View)</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <MapView />
         </CardContent>
       </Card>
     </div>

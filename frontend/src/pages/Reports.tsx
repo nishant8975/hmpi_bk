@@ -2,6 +2,7 @@ import { StatCard } from "@/components/StatCard";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { useQuery } from "@tanstack/react-query";
 import { 
   TrendingUp, 
   Download, 
@@ -10,28 +11,44 @@ import {
   FileText,
   Calendar,
   Filter,
-  PieChart
+  PieChart,
+  AlertCircle
 } from "lucide-react";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area } from 'recharts';
+import { getMapData, getPolicymakerReportRegions, getPolicymakerReportSummary, getPolicymakerReportTrend, downloadSiteReport } from "@/service/api";
+import { Loader2 } from "lucide-react";
 
 const Reports = () => {
-  // Mock trend data
-  const trendData = [
-    { month: 'Jan', avgHMPI: 145, safeSites: 78, criticalSites: 12 },
-    { month: 'Feb', avgHMPI: 152, safeSites: 75, criticalSites: 15 },
-    { month: 'Mar', avgHMPI: 138, safeSites: 82, criticalSites: 10 },
-    { month: 'Apr', avgHMPI: 142, safeSites: 80, criticalSites: 11 },
-    { month: 'May', avgHMPI: 135, safeSites: 85, criticalSites: 8 },
-    { month: 'Jun', avgHMPI: 128, safeSites: 88, criticalSites: 6 },
-  ];
+  const { data: summaryData, isLoading: isSummaryLoading } = useQuery({
+    queryKey: ["policymakerReportSummary"],
+    queryFn: getPolicymakerReportSummary,
+    staleTime: 0,
+  });
 
-  const regionalData = [
-    { region: 'North District', sites: 45, avgHMPI: 125, status: 'Good' },
-    { region: 'South District', sites: 38, avgHMPI: 165, status: 'Moderate' },
-    { region: 'East District', sites: 52, avgHMPI: 89, status: 'Excellent' },
-    { region: 'West District', sites: 41, avgHMPI: 245, status: 'Poor' },
-    { region: 'Central District', sites: 35, avgHMPI: 178, status: 'Moderate' },
-  ];
+  const { data: trendResponse, isLoading: isTrendLoading } = useQuery({
+    queryKey: ["policymakerReportTrend"],
+    queryFn: getPolicymakerReportTrend,
+    staleTime: 0,
+  });
+
+  const { data: regionsResponse, isLoading: isRegionsLoading } = useQuery({
+    queryKey: ["policymakerReportRegions"],
+    queryFn: getPolicymakerReportRegions,
+    staleTime: 0,
+  });
+
+  const trendData = trendResponse?.trendData ?? [];
+  const regionalData = regionsResponse?.regionalData ?? [];
+
+  const stats = summaryData?.stats;
+
+  const { data: mapData } = useQuery({
+    queryKey: ["mapData"],
+    queryFn: getMapData,
+    staleTime: 0,
+  });
+
+  const sitesForDownload = mapData ?? [];
 
   const getStatusVariant = (status: string) => {
     switch (status) {
@@ -42,6 +59,15 @@ const Reports = () => {
       default: return 'default';
     }
   };
+
+  const isLoading = isSummaryLoading || isTrendLoading || isRegionsLoading;
+  if (isLoading) {
+    return (
+      <div className="flex justify-center items-center h-64">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-8">
@@ -67,32 +93,33 @@ const Reports = () => {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <StatCard
           title="Average HMPI"
-          value="142.3"
-          subtitle="Across all monitored sites"
+          value={stats?.averageHMPI ?? 0}
+          subtitle="Average of latest HMPI per site"
           icon={BarChart3}
-          trend={{ value: -5.2, isPositive: true }}
         />
         <StatCard
-          title="Safe Sites"
-          value="73%"
-          subtitle="Below pollution threshold"
+          title="Safe Sites %"
+          value={
+            stats && stats.totalSites > 0
+              ? `${((stats.safeSites / stats.totalSites) * 100).toFixed(1)}%`
+              : "0%"
+          }
+          subtitle="Sites below safe threshold"
           icon={MapPin}
           variant="safe"
-          trend={{ value: 8.1, isPositive: true }}
         />
         <StatCard
-          title="Improvement Rate"
-          value="+12%"
-          subtitle="Since last quarter"
+          title="High + Critical"
+          value={(stats?.highRiskSites ?? 0) + (stats?.criticalSites ?? 0)}
+          subtitle="Latest per site"
           icon={TrendingUp}
-          variant="safe"
+          variant="critical"
         />
         <StatCard
-          title="Reports Generated"
-          value="28"
-          subtitle="This month"
+          title="Total Sites"
+          value={stats?.totalSites ?? 0}
+          subtitle="Currently monitored locations"
           icon={FileText}
-          trend={{ value: 25.3, isPositive: true }}
         />
       </div>
 
@@ -211,7 +238,7 @@ const Reports = () => {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {regionalData.map((region, index) => (
               <Card key={index} className="border border-border/50">
                 <CardHeader className="pb-3">
@@ -243,6 +270,49 @@ const Reports = () => {
               </Card>
             ))}
           </div>
+        </CardContent>
+      </Card>
+
+      {/* High-risk Site Downloads */}
+      <Card className="shadow-card">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <AlertCircle className="w-5 h-5 text-primary" />
+            All Sites (Download Reports)
+          </CardTitle>
+          <CardDescription>
+            Download the full per-site HMPI + metal concentration report for action planning.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {sitesForDownload.length > 0 ? (
+            <div className="space-y-3">
+              {sitesForDownload.slice(0, 30).map((p: any) => (
+                <div
+                  key={p.id}
+                  className="flex items-center justify-between gap-4 p-3 border border-border/50 rounded-lg"
+                >
+                  <div className="min-w-0">
+                    <p className="font-medium truncate">{p.site}</p>
+                    <p className="text-sm text-muted-foreground">
+                      HMPI:{" "}
+                      {Number.isFinite(Number(p.hmpi)) ? Number(p.hmpi).toFixed(2) : "N/A"} • Risk:{" "}
+                      <span className="capitalize">{p.risk_level}</span>
+                    </p>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => downloadSiteReport(String(p.id), "excel")}
+                  >
+                    Download
+                  </Button>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">No high/critical sites found.</p>
+          )}
         </CardContent>
       </Card>
 

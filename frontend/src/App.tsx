@@ -61,15 +61,18 @@ const App = () => (
               <Route path="/profile" element={<ProfilePage />} />
               <Route path="/report-issue" element={<CommunityReportPage />} />
 
-              <Route element={<ProtectedRoute allowedRoles={['researcher', 'admin']} />}>
+              <Route element={<ProtectedRoute allowedRoles={['researcher', 'policymaker', 'admin']} />}>
                 <Route path="/upload" element={<Upload />} />
                 <Route path="/results" element={<Results />} />
                 <Route path="/analysis-history" element={<AnalysisHistory />} />
                 <Route path="/site/:siteId" element={<SiteDetailsPage />} />
               </Route>
 
-              <Route element={<ProtectedRoute allowedRoles={['policymaker', 'researcher', 'admin']} />}>
+              <Route element={<ProtectedRoute allowedRoles={['policymaker', 'admin']} />}>
                 <Route path="/reports" element={<Reports />} />
+              </Route>
+
+              <Route element={<ProtectedRoute allowedRoles={['policymaker', 'researcher', 'admin']} />}>
                 <Route path="/alerts" element={<Alerts />} />
               </Route>
 
