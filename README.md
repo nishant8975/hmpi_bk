@@ -39,6 +39,9 @@ AquaWatch is designed with a decoupled architecture to handle both snappy UI int
 * npm or yarn
 * A Google Gemini API Key
 
+ ## 🌐 Live Demo  
+[View Project](https://hmpi-bk.vercel.app/)
+
 ### Installation
 
 1. **Clone the repository:**
